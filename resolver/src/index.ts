@@ -2,7 +2,8 @@ import express, { Request, Response } from "express";
 import "dotenv/config";
 import { parseEther, parseUnits, randomBytes, JsonRpcProvider } from "ethers";
 import { uint8ArrayToHex, UINT_40_MAX } from "@1inch/byte-utils";
-import Sdk, { Address } from "@1inch/cross-chain-sdk";
+import * as Sdk from "@1inch/cross-chain-sdk";
+const Address = Sdk.Address;
 import { config } from "./lib/config";
 import { Wallet } from "./lib/wallet";
 import { Resolver } from "./lib/resolver";
@@ -13,15 +14,13 @@ const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
 
-const userPk =
-  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
-const resolverPk =
-  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
+const userPk = process.env.PRIVATE_KEY || "0x";
+const resolverPk = process.env.PRIVATE_KEY || "0x";
 
-const sourceResolverAddress = process.env.SRC_RESOLVER!;
-const destinationResolverAddress = process.env.DST_RESOLVER!;
-const sourceEscrowFactory = process.env.SRC_ESCROW_FACTORY!;
-const dstEscrowFactory = process.env.DST_ESCROW_FACTORY!;
+const sourceResolverAddress = "0x88049d50AAE11BAa334b5E86B6B90BaE078f5851";
+const destinationResolverAddress = "0x15e4294eA33f19828eCA2B6B2B867aBf0C2509f8";
+const sourceEscrowFactory = "0x99275358DC3931Bcb10FfDd4DFa6276C38D9a6f0";
+const dstEscrowFactory = "0x73e5d195b5cf7eb46de86901ad941986e74921ca";
 
 const srcProvider = new JsonRpcProvider(
   config.chain.source.url,
