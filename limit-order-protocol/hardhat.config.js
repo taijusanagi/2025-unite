@@ -19,6 +19,19 @@ if (getNetwork().indexOf("zksync") !== -1) {
 
 const { networks, etherscan } = new Networks().registerAll();
 
+const accounts = [process.env.DEPLOYER_PRIVATE_KEY];
+
+networks["monad-testnet"] = {
+    url: "https://rpc.ankr.com/monad_testnet",
+    accounts,
+};
+networks["base-sepolia"] = {
+    url: "https://sepolia.base.org",
+    accounts,
+};
+
+etherscan.apiKey["baseSepolia"] = process.env.BASESCAN_API_KEY || "";
+
 module.exports = {
     etherscan,
     tracer: {
@@ -63,4 +76,12 @@ module.exports = {
         pages: "files",
         exclude: ["mocks"],
     },
+    // sourcify: {
+    //     enabled: true,
+    //     apiUrl: "https://sourcify-api-monad.blockvision.org",
+    //     browserUrl: "https://testnet.monadexplorer.com",
+    // },
+    // etherscan: {
+    //     enabled: false,
+    // },
 };
