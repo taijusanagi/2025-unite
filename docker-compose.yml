@@ -1,0 +1,24 @@
+services:
+  relayer:
+    build:
+      context: ./relayer
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3001:8080"
+    volumes:
+      - ./relayer:/app
+    environment:
+      - PORT=8080
+    command: npm run dev
+
+  resolver:
+    build:
+      context: ./resolver
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3002:8080"
+    volumes:
+      - ./resolver:/app
+    environment:
+      - PORT=8080
+    command: npm run dev
