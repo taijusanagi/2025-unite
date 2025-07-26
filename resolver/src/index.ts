@@ -187,8 +187,8 @@ app.post("/create-order", async (req: Request, res: Response) => {
       {
         salt: Sdk.randBigInt(1000n),
         maker: new Address(await srcUserWallet.getAddress()),
-        makingAmount: parseUnits("100", 6),
-        takingAmount: parseUnits("99", 6),
+        makingAmount: parseUnits("0.0001", 18),
+        takingAmount: parseUnits("0.00009", 18),
         makerAsset: new Address(config.chain.source.wrappedNative),
         takerAsset: new Address(config.chain.destination.wrappedNative),
       },
@@ -246,6 +246,7 @@ app.post("/create-order", async (req: Request, res: Response) => {
 // Cron job to process fillable orders
 app.post("/process-orders", async (req: Request, res: Response) => {
   try {
+    console.log("Initializing resolvers...");
     const srcChainResolver = new Wallet(resolverPk, srcProvider);
     const dstChainResolver = new Wallet(resolverPk, dstProvider);
     const resolverContract = new Resolver(
@@ -255,10 +256,14 @@ app.post("/process-orders", async (req: Request, res: Response) => {
 
     const processed = [];
 
-    for (const entry of orders) {
+    console.log(`Processing ${orders.length} orders...`);
+    for (const [index, entry] of orders.entries()) {
+      console.log(`\nProcessing order ${index + 1}/${orders.length}`);
       const { order, signature, secret } = entry;
 
       const fillAmount = order.makingAmount;
+      console.log("Deploying source escrow contract...");
+
       const { blockHash: srcDeployBlock } = await srcChainResolver.send(
         resolverContract.deploySrc(
           config.chain.source.chainId,
@@ -271,6 +276,7 @@ app.post("/process-orders", async (req: Request, res: Response) => {
           fillAmount
         )
       );
+      console.log(`Source deployed at block hash: ${srcDeployBlock}`);
 
       const srcFactory = new EscrowFactory(
         srcChainResolver.provider,
@@ -280,15 +286,23 @@ app.post("/process-orders", async (req: Request, res: Response) => {
         dstChainResolver.provider,
         dstEscrowFactory
       );
-      const srcEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock);
 
+      console.log("Fetching source deployment event...");
+      const srcEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock);
+      console.log("Source deployment event fetched.");
+
+      console.log("Constructing destination escrow immutables...");
       const dstImmutables = srcEvent[0]
         .withComplement(srcEvent[1])
         .withTaker(new Address(resolverContract.dstAddress));
+
+      console.log("Deploying destination escrow contract...");
       const { blockTimestamp: dstDeployedAt } = await dstChainResolver.send(
         resolverContract.deployDst(dstImmutables)
       );
+      console.log(`Destination deployed at timestamp: ${dstDeployedAt}`);
 
+      console.log("Calculating destination escrow address...");
       const dstEscrowAddress = new Sdk.EscrowFactory(
         new Address(dstEscrowFactory)
       ).getDstEscrowAddress(
@@ -298,11 +312,15 @@ app.post("/process-orders", async (req: Request, res: Response) => {
         new Address(resolverContract.dstAddress),
         await dstFactory.getDestinationImpl()
       );
+      console.log(`Destination escrow address: ${dstEscrowAddress}`);
 
+      console.log("Calculating source escrow address...");
       const srcEscrowAddress = new Sdk.EscrowFactory(
         new Address(sourceEscrowFactory)
       ).getSrcEscrowAddress(srcEvent[0], await srcFactory.getSourceImpl());
+      console.log(`Source escrow address: ${srcEscrowAddress}`);
 
+      console.log("Withdrawing from destination escrow...");
       await dstChainResolver.send(
         resolverContract.withdraw(
           "dst",
@@ -311,14 +329,20 @@ app.post("/process-orders", async (req: Request, res: Response) => {
           dstImmutables.withDeployedAt(dstDeployedAt)
         )
       );
+      console.log("Withdrawal from destination complete.");
 
+      console.log("Withdrawing from source escrow...");
       await srcChainResolver.send(
         resolverContract.withdraw("src", srcEscrowAddress, secret, srcEvent[0])
       );
+      console.log("Withdrawal from source complete.");
 
-      processed.push(order.getOrderHash(config.chain.source.chainId));
+      const orderHash = order.getOrderHash(config.chain.source.chainId);
+      processed.push(orderHash);
+      console.log(`Order processed: ${orderHash}`);
     }
 
+    console.log("All orders processed successfully.");
     res.json({ processed });
   } catch (e) {
     console.error("Error processing orders:", e);
