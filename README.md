@@ -13,6 +13,9 @@ https://sepolia.basescan.org/address/0x99275358DC3931Bcb10FfDd4DFa6276C38D9a6f0
 Resolver
 https://sepolia.basescan.org/address/0x88049d50AAE11BAa334b5E86B6B90BaE078f5851
 
+TrueERC20
+https://sepolia.basescan.org/address/0x93992AF843537Cf0A07E6638ABbbFB837111C753
+
 ## Monad
 
 Limit Order Protocol
@@ -23,3 +26,7 @@ https://testnet.monadexplorer.com/address/0x73e5d195b5cf7eb46de86901ad941986e749
 
 Resolver
 https://testnet.monadexplorer.com/address/0x15e4294eA33f19828eCA2B6B2B867aBf0C2509f8
+
+TrueERC20
+
+https://testnet.monadexplorer.com/address/0xf927004F33f26CaA1763BB21454Ef36AA76e1064

@@ -45,6 +45,7 @@ const orders: any[] = [];
 
 app.get("/", (req: Request, res: Response) => {
   res.send("Resolver API");
+  console.log(orders);
 });
 
 // Create and store order
@@ -106,9 +107,12 @@ app.post("/create-order", async (req: Request, res: Response) => {
     );
 
     const signature = await userWallet.signOrder(srcChainId, order);
-    orders.push({ order, signature, secret });
-
-    res.json({ order, signature, secret });
+    if (orders.length == 0) {
+      orders.push({ order, signature, secret });
+    } else {
+      orders[0] = { order, signature, secret };
+    }
+    res.json({ success: true });
   } catch (e) {
     console.error("Error creating order:", e);
     res.status(500).send("Error creating order");

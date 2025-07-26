@@ -179,6 +179,8 @@ describe('Resolving example', () => {
                 }
             )
 
+            console.log('order', order)
+
             const signature = await srcChainUser.signOrder(srcChainId, order)
             const orderHash = order.getOrderHash(srcChainId)
             // Resolver fills order
