@@ -13,8 +13,11 @@ const PORT = process.env.PORT || 3001;
 
 app.use(express.json());
 
-const userPk = process.env.USER_PK!;
-const resolverPk = process.env.RESOLVER_PK!;
+const userPk =
+  "0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d";
+const resolverPk =
+  "0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a";
+
 const sourceResolverAddress = process.env.SRC_RESOLVER!;
 const destinationResolverAddress = process.env.DST_RESOLVER!;
 const sourceEscrowFactory = process.env.SRC_ESCROW_FACTORY!;
@@ -116,8 +119,6 @@ app.post("/create-order", async (req: Request, res: Response) => {
 // Cron job to process fillable orders
 app.post("/process-orders", async (req: Request, res: Response) => {
   try {
-    const srcChainUser = new Wallet(userPk, srcProvider);
-    const dstChainUser = new Wallet(userPk, dstProvider);
     const srcChainResolver = new Wallet(resolverPk, srcProvider);
     const dstChainResolver = new Wallet(resolverPk, dstProvider);
     const resolverContract = new Resolver(
