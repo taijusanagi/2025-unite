@@ -1,3 +1,3 @@
-# DexGogeta
+# GattaiSwap
 
 Fusion unleashed. Chains united.

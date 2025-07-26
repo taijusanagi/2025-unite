@@ -100,19 +100,32 @@ export default function Home() {
 
             {/* Hero Content */}
             <div className="relative z-10">
-              <img
-                src="/character-top.png"
-                alt="GattaiSwap Character"
-                className="mx-auto mb-6 max-w-xs md:max-w-sm drop-shadow-[0_0_30px_rgba(59,130,246,0.7)] rounded-xl"
-              />
-              <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-500">
-                GattaiSwap
-              </h1>
-              <p className="text-lg md:text-xl text-gray-300 font-medium">
-                Fusion unleashed. Chains united.
-              </p>
+              {/* Image container with overlayed text near the bottom */}
+              <div className="relative z-10 flex flex-col items-center text-center">
+                {/* Image with title overlay */}
+                <div className="relative inline-block mx-auto">
+                  <img
+                    src="/icon.png"
+                    alt="GattaiSwap Character"
+                    className="max-w-xs md:max-w-sm rounded-xl"
+                  />
 
-              <div className="mt-6">
+                  {/* GattaiSwap title over image */}
+                  <div className="absolute bottom-14 left-0 right-0 flex flex-col items-center text-center px-4">
+                    <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-50 to-blue-400 drop-shadow-lg">
+                      GattaiSwap
+                    </h1>
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center px-4">
+                    <p className="text-base md:text-lg text-gray-300 font-medium drop-shadow text-center">
+                      Fusion unleashed. Chains united.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Start button below */}
+              <div className="mt-6 text-center">
                 <button
                   onClick={() => setShowDex(true)}
                   className="w-full max-w-xs mx-auto py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
