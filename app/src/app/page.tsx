@@ -48,27 +48,24 @@ export default function Home() {
                       GattaiSwap
                     </h1>
                   </div>
-                  <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center px-4">
-                    <p className="text-base md:text-lg text-gray-300 font-medium drop-shadow text-center">
-                      Fusion unleashed. Chains united.
-                    </p>
-                  </div>
-                </div>
 
-                {/* Floating Coins */}
-                <div className="relative mt-8 flex flex-wrap justify-center gap-6">
-                  {coins.map((src, i) => (
-                    <img
-                      key={i}
-                      src={src}
-                      alt={`coin-${i}`}
-                      className={`w-12 h-12 md:w-16 md:h-16 object-contain animate-floating coin-float-${i}`}
-                    />
-                  ))}
+                  {/* Floating Coins */}
+                  <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center">
+                    <div className="flex flex-wrap justify-center gap-6">
+                      {coins.map((src, i) => (
+                        <img
+                          key={i}
+                          src={src}
+                          alt={`coin-${i}`}
+                          className={`w-10 h-10 object-contain`}
+                        />
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="mt-6 text-center">
+              <div className="mt-4 text-center">
                 <button
                   onClick={() => setShowDex(true)}
                   className="w-full max-w-xs mx-auto py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
