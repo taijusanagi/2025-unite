@@ -7,24 +7,66 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
-      {/* Header (only in Dex mode) */}
-      {showDex && (
-        <div className="flex justify-between items-center px-6 py-4 border-b border-blue-800 bg-black/30 backdrop-blur-md">
-          <div
-            className="text-2xl font-bold text-blue-400 cursor-pointer"
-            onClick={() => setShowDex(false)}
-          >
-            GattaiSwap
+      {/* 1. Header (Always Visible) */}
+      <div className="flex justify-between items-center px-6 py-4">
+        <div
+          className="text-2xl font-bold text-blue-400 cursor-pointer"
+          onClick={() => showDex && setShowDex(false)}
+        >
+          GattaiSwap
+        </div>
+        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition cursor-pointer">
+          Connect Wallet
+        </button>
+      </div>
+
+      {/* 2. Hero */}
+      {!showDex && (
+        <div className="flex-grow flex items-center justify-center px-4">
+          <div className="relative text-center max-w-3xl">
+            {/* Background Glow */}
+            <div className="absolute inset-0 z-0">
+              <div className="w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-600/20 via-blue-900/10 to-black"></div>
+            </div>
+
+            {/* Hero Content */}
+            <div className="relative z-10">
+              <div className="relative z-10 flex flex-col items-center text-center">
+                <div className="relative inline-block mx-auto">
+                  <img
+                    src="/icon.png"
+                    alt="GattaiSwap Character"
+                    className="max-w-xs md:max-w-sm rounded-xl"
+                  />
+                  <div className="absolute bottom-14 left-0 right-0 flex flex-col items-center text-center px-4">
+                    <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-50 to-blue-400 drop-shadow-lg">
+                      GattaiSwap
+                    </h1>
+                  </div>
+                  <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center px-4">
+                    <p className="text-base md:text-lg text-gray-300 font-medium drop-shadow text-center">
+                      Fusion unleashed. Chains united.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 text-center">
+                <button
+                  onClick={() => setShowDex(true)}
+                  className="w-full max-w-xs mx-auto py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
+                >
+                  Start
+                </button>
+              </div>
+            </div>
           </div>
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition cursor-pointer">
-            Connect Wallet
-          </button>
         </div>
       )}
 
-      {/* Main Content */}
-      <div className="flex-grow flex items-center justify-center px-4 py-10">
-        {showDex ? (
+      {/* 3. Dex */}
+      {showDex && (
+        <div className="flex-grow flex items-center justify-center px-4 py-10">
           <div className="w-full max-w-md bg-gradient-to-br from-gray-800 via-gray-900 to-black border border-blue-900 shadow-xl p-6 rounded-xl space-y-6">
             <h2 className="text-lg font-semibold text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
               Swap with 1inch Fusion +
@@ -91,57 +133,13 @@ export default function Home() {
               Swap Now
             </button>
           </div>
-        ) : (
-          <div className="relative text-center max-w-3xl">
-            {/* Background Glow */}
-            <div className="absolute inset-0 z-0">
-              <div className="w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-600/20 via-blue-900/10 to-black"></div>
-            </div>
+        </div>
+      )}
 
-            {/* Hero Content */}
-            <div className="relative z-10">
-              {/* Image container with overlayed text near the bottom */}
-              <div className="relative z-10 flex flex-col items-center text-center">
-                {/* Image with title overlay */}
-                <div className="relative inline-block mx-auto">
-                  <img
-                    src="/icon.png"
-                    alt="GattaiSwap Character"
-                    className="max-w-xs md:max-w-sm rounded-xl"
-                  />
-
-                  {/* GattaiSwap title over image */}
-                  <div className="absolute bottom-14 left-0 right-0 flex flex-col items-center text-center px-4">
-                    <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-50 to-blue-400 drop-shadow-lg">
-                      GattaiSwap
-                    </h1>
-                  </div>
-                  <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center px-4">
-                    <p className="text-base md:text-lg text-gray-300 font-medium drop-shadow text-center">
-                      Fusion unleashed. Chains united.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Start button below */}
-              <div className="mt-6 text-center">
-                <button
-                  onClick={() => setShowDex(true)}
-                  className="w-full max-w-xs mx-auto py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
-                >
-                  Start
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Footer (Always Visible) */}
+      {/* 4. Footer (Always Visible) */}
       <footer className="px-6 py-4 text-sm text-gray-400 flex items-center justify-end">
         <a
-          href="https://github.com/taijusanagi/2025-unite" // replace with your real repo
+          href="https://github.com/taijusanagi/2025-unite"
           target="_blank"
           rel="noopener noreferrer"
           className="flex items-center space-x-2 hover:text-white transition cursor-pointer"
