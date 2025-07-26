@@ -1,14 +1,14 @@
 "use client";
-
 import React, { useState } from "react";
+import { FaGithub } from "react-icons/fa";
 
 export default function Home() {
   const [showDex, setShowDex] = useState(false);
 
-  if (showDex) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
-        {/* Header */}
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
+      {/* Header (only in Dex mode) */}
+      {showDex && (
         <div className="flex justify-between items-center px-6 py-4 border-b border-blue-800 bg-black/30 backdrop-blur-md">
           <div
             className="text-2xl font-bold text-blue-400 cursor-pointer"
@@ -20,12 +20,14 @@ export default function Home() {
             Connect Wallet
           </button>
         </div>
+      )}
 
-        {/* Dex Swap UI - Centered */}
-        <div className="flex-grow flex items-center justify-center px-4 py-10">
+      {/* Main Content */}
+      <div className="flex-grow flex items-center justify-center px-4 py-10">
+        {showDex ? (
           <div className="w-full max-w-md bg-gradient-to-br from-gray-800 via-gray-900 to-black border border-blue-900 shadow-xl p-6 rounded-xl space-y-6">
             <h2 className="text-lg font-semibold text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-              Crosschain Swap with 1inch Fusion +
+              Swap with 1inch Fusion +
             </h2>
 
             {/* From Section */}
@@ -89,42 +91,51 @@ export default function Home() {
               Swap Now
             </button>
           </div>
-        </div>
-      </div>
-    );
-  }
+        ) : (
+          <div className="relative text-center max-w-3xl">
+            {/* Background Glow */}
+            <div className="absolute inset-0 z-0">
+              <div className="w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-600/20 via-blue-900/10 to-black"></div>
+            </div>
 
-  // Hero screen
-  return (
-    <div className="relative min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 flex items-center justify-center text-white px-6">
-      {/* Background Glow */}
-      <div className="absolute inset-0 z-0">
-        <div className="w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-blue-600/20 via-blue-900/10 to-black"></div>
+            {/* Hero Content */}
+            <div className="relative z-10">
+              <img
+                src="/character-top.png"
+                alt="DexGogeta Character"
+                className="mx-auto mb-6 max-w-xs md:max-w-sm drop-shadow-[0_0_30px_rgba(59,130,246,0.7)] rounded-xl"
+              />
+              <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-500">
+                DexGogeta
+              </h1>
+              <p className="text-lg md:text-xl text-gray-300 font-medium">
+                Fusion unleashed. Chains united.
+              </p>
+
+              <div className="mt-6">
+                <button
+                  onClick={() => setShowDex(true)}
+                  className="w-full max-w-xs mx-auto py-3 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
+                >
+                  Start
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Main Content */}
-      <div className="relative z-10 text-center max-w-3xl">
-        <img
-          src="/character-top.png"
-          alt="DexGogeta Character"
-          className="mx-auto mb-6 max-w-xs md:max-w-sm drop-shadow-[0_0_30px_rgba(59,130,246,0.7)] rounded-xl"
-        />
-        <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-500">
-          DexGogeta
-        </h1>
-        <p className="text-lg md:text-xl text-gray-300 font-medium">
-          Fusion unleashed. Chains united.
-        </p>
-
-        <div className="mt-4">
-          <button
-            onClick={() => setShowDex(true)}
-            className="w-full max-w-xs mx-auto py-3 mt-4 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
-          >
-            Start
-          </button>
-        </div>
-      </div>
+      {/* Footer (Always Visible) */}
+      <footer className="px-6 py-4 text-sm text-gray-400 flex items-center justify-end">
+        <a
+          href="https://github.com/taijusanagi/2025-unite" // replace with your real repo
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center space-x-2 hover:text-white transition cursor-pointer"
+        >
+          <FaGithub className="w-5 h-5" />
+        </a>
+      </footer>
     </div>
   );
 }
