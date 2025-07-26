@@ -65,8 +65,8 @@ app.post("/create-order", async (req: Request, res: Response) => {
         maker: new Address(await userWallet.getAddress()),
         makingAmount: parseUnits("100", 6),
         takingAmount: parseUnits("99", 6),
-        makerAsset: new Address(config.chain.source.tokens.USDC.address),
-        takerAsset: new Address(config.chain.destination.tokens.USDC.address),
+        makerAsset: new Address(config.chain.source.wrappedNative),
+        takerAsset: new Address(config.chain.destination.wrappedNative),
       },
       {
         hashLock: Sdk.HashLock.forSingleFill(secret),
