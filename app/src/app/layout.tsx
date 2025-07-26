@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DexGogeta",
+  title: "GattaiSwap",
   description: "Fusion unleashed. Chains united.",
 };
 

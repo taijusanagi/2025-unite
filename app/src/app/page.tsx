@@ -14,7 +14,7 @@ export default function Home() {
             className="text-2xl font-bold text-blue-400 cursor-pointer"
             onClick={() => setShowDex(false)}
           >
-            GogetaDex
+            GattaiSwap
           </div>
           <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition cursor-pointer">
             Connect Wallet
@@ -102,11 +102,11 @@ export default function Home() {
             <div className="relative z-10">
               <img
                 src="/character-top.png"
-                alt="DexGogeta Character"
+                alt="GattaiSwap Character"
                 className="mx-auto mb-6 max-w-xs md:max-w-sm drop-shadow-[0_0_30px_rgba(59,130,246,0.7)] rounded-xl"
               />
               <h1 className="text-3xl md:text-5xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-500">
-                DexGogeta
+                GattaiSwap
               </h1>
               <p className="text-lg md:text-xl text-gray-300 font-medium">
                 Fusion unleashed. Chains united.
