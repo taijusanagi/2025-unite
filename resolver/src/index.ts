@@ -1,13 +1,22 @@
 import express, { Request, Response } from "express";
 import "dotenv/config";
-import { parseEther, parseUnits, randomBytes, JsonRpcProvider } from "ethers";
-import { uint8ArrayToHex, UINT_40_MAX } from "@1inch/byte-utils";
+import {
+  parseEther,
+  parseUnits,
+  randomBytes,
+  JsonRpcProvider,
+  Contract,
+} from "ethers";
+import { uint8ArrayToHex, UINT_40_MAX, UINT_256_MAX } from "@1inch/byte-utils";
 import * as Sdk from "@1inch/cross-chain-sdk";
 const Address = Sdk.Address;
 import { config } from "./lib/config";
 import { Wallet } from "./lib/wallet";
 import { Resolver } from "./lib/resolver";
 import { EscrowFactory } from "./lib/escrow-factory";
+
+import IWETHContract from "./lib/contracts/IWETH.json";
+import ResolverContract from "./lib/contracts/Resolver.json";
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -18,7 +27,7 @@ const userPk = process.env.PRIVATE_KEY || "0x";
 const resolverPk = process.env.PRIVATE_KEY || "0x";
 
 const sourceResolverAddress = "0x88049d50AAE11BAa334b5E86B6B90BaE078f5851";
-const destinationResolverAddress = "0x15e4294eA33f19828eCA2B6B2B867aBf0C2509f8";
+const destinationResolverAddress = "0xF920618C3CF765cE5570A15665C50b3e3f287352";
 const sourceEscrowFactory = "0x99275358DC3931Bcb10FfDd4DFa6276C38D9a6f0";
 const dstEscrowFactory = "0x73e5d195b5cf7eb46de86901ad941986e74921ca";
 
@@ -43,9 +52,124 @@ const dstProvider = new JsonRpcProvider(
 // Mock DB
 const orders: any[] = [];
 
-app.get("/", (req: Request, res: Response) => {
+app.get("/", async (req: Request, res: Response) => {
   res.send("Resolver API");
   console.log(orders);
+  const depositAmount = parseEther("0.01");
+
+  const srcUserWallet = new Wallet(userPk, srcProvider);
+  const srcResolverWallet = new Wallet(resolverPk, srcProvider);
+  const dstResolverWallet = new Wallet(resolverPk, dstProvider);
+
+  const dstResolverContract = new Contract(
+    destinationResolverAddress,
+    ResolverContract.abi,
+    dstResolverWallet.signer
+  );
+
+  const srcWrappedNativeTokenContract = new Contract(
+    config.chain.source.wrappedNative,
+    IWETHContract.abi,
+    srcUserWallet.signer
+  );
+
+  const dstWrappedNativeTokenContract = new Contract(
+    config.chain.destination.wrappedNative,
+    IWETHContract.abi,
+    dstResolverWallet.signer
+  );
+
+  const srcBalance = await srcWrappedNativeTokenContract.balanceOf(
+    await srcUserWallet.getAddress()
+  );
+
+  if (srcBalance < depositAmount) {
+    console.log("Insufficient balance, depositing...");
+    const tx = await srcWrappedNativeTokenContract.deposit({
+      value: depositAmount,
+    });
+    await tx.wait();
+    console.log("Deposit successful");
+  } else {
+    console.log("Sufficient balance, no deposit needed");
+  }
+
+  const srcAllowance = await srcWrappedNativeTokenContract.allowance(
+    await srcUserWallet.getAddress(),
+    config.chain.source.limitOrderProtocol
+  );
+
+  if (srcAllowance < UINT_256_MAX) {
+    console.log("Insufficient allowance, approving...");
+    const tx = await srcWrappedNativeTokenContract.approve(
+      config.chain.source.limitOrderProtocol,
+      UINT_256_MAX
+    );
+    await tx.wait();
+    console.log("Approval successful");
+  } else {
+    console.log("Sufficient allowance, no approval needed");
+  }
+
+  const dstNativeTokenBalance = await dstProvider.getBalance(
+    destinationResolverAddress
+  );
+
+  if (dstNativeTokenBalance < depositAmount) {
+    console.log("Insufficient balance on destination chain, depositing...");
+    const tx = await dstResolverWallet.signer.sendTransaction({
+      to: destinationResolverAddress,
+      value: depositAmount,
+    });
+    await tx.wait();
+    console.log("Deposit successful");
+  } else {
+    console.log("Sufficient balance on destination chain, no deposit needed");
+  }
+
+  const dstWrappedNativeTokenBalance =
+    await dstWrappedNativeTokenContract.balanceOf(destinationResolverAddress);
+
+  if (dstWrappedNativeTokenBalance < depositAmount) {
+    console.log("Insufficient balance on destination chain, depositing...");
+    const depositTx = await dstWrappedNativeTokenContract.deposit({
+      value: depositAmount,
+    });
+    await depositTx.wait();
+    console.log("Deposit successful");
+    const transferTx = await dstWrappedNativeTokenContract.transfer(
+      destinationResolverAddress, // or any recipient you intend
+      depositAmount
+    );
+    await transferTx.wait();
+    console.log("Transfer successful");
+  } else {
+    console.log("Sufficient balance on destination chain, no deposit needed");
+  }
+
+  const dstAllowance = await dstWrappedNativeTokenContract.allowance(
+    destinationResolverAddress,
+    config.chain.destination.limitOrderProtocol
+  );
+
+  if (dstAllowance < UINT_256_MAX) {
+    console.log("Insufficient allowance on destination chain, approving...");
+    const functionData =
+      dstWrappedNativeTokenContract.interface.encodeFunctionData("approve", [
+        config.chain.destination.limitOrderProtocol,
+        UINT_256_MAX,
+      ]);
+    const tx = await dstResolverContract.arbitraryCalls(
+      [config.chain.destination.wrappedNative],
+      [functionData]
+    );
+    await tx.wait();
+    console.log("Approval successful");
+  } else {
+    console.log(
+      "Sufficient allowance on destination chain, no approval needed"
+    );
+  }
 });
 
 // Create and store order
@@ -56,13 +180,13 @@ app.post("/create-order", async (req: Request, res: Response) => {
     const dstChainId = config.chain.destination.chainId;
     const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
-    const userWallet = new Wallet(userPk, srcProvider);
+    const srcUserWallet = new Wallet(userPk, srcProvider);
 
     const order = Sdk.CrossChainOrder.new(
       new Address(sourceEscrowFactory),
       {
         salt: Sdk.randBigInt(1000n),
-        maker: new Address(await userWallet.getAddress()),
+        maker: new Address(await srcUserWallet.getAddress()),
         makingAmount: parseUnits("100", 6),
         takingAmount: parseUnits("99", 6),
         makerAsset: new Address(config.chain.source.wrappedNative),
@@ -106,7 +230,7 @@ app.post("/create-order", async (req: Request, res: Response) => {
       }
     );
 
-    const signature = await userWallet.signOrder(srcChainId, order);
+    const signature = await srcUserWallet.signOrder(srcChainId, order);
     if (orders.length == 0) {
       orders.push({ order, signature, secret });
     } else {

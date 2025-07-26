@@ -25,8 +25,7 @@ Escrow Factory
 https://testnet.monadexplorer.com/address/0x73e5d195b5cf7eb46de86901ad941986e74921ca
 
 Resolver
-https://testnet.monadexplorer.com/address/0x15e4294eA33f19828eCA2B6B2B867aBf0C2509f8
+https://testnet.monadexplorer.com/address/0xF920618C3CF765cE5570A15665C50b3e3f287352
 
 TrueERC20
-
 https://testnet.monadexplorer.com/address/0xf927004F33f26CaA1763BB21454Ef36AA76e1064

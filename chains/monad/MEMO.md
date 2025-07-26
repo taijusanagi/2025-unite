@@ -39,7 +39,7 @@ forge verify-contract 0x73E5D195B5cf7EB46DE86901AD941986E74921CA contracts/lib/c
 ```
 
 ```
-forge create contracts/src/Resolver.sol:Resolver -r "https://rpc.ankr.com/monad_testnet" --broadcast --private-key <PRIVATE_KEY> --constructor-args 0x73e5d195b5cf7eb46de86901ad941986e74921ca 0x3c63B9da5DA101F36061C9503a06906031D7457c 0x760afe86e5de5fa0ee542fc7b7b713e1c5425701
+forge create contracts/src/Resolver.sol:Resolver -r "https://rpc.ankr.com/monad_testnet" --broadcast --private-key <PRIVATE_KEY> --constructor-args 0x73e5d195b5cf7eb46de86901ad941986e74921ca 0x3c63B9da5DA101F36061C9503a06906031D7457c 0xc0797BD75cD3F34ee1CD046f03d9c85B36C2Fd01
 ```
 
 ```
