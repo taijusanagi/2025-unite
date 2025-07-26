@@ -5,6 +5,8 @@ import { FaGithub } from "react-icons/fa";
 export default function Home() {
   const [showDex, setShowDex] = useState(false);
 
+  const coins = ["/coins/monad.png", "/coins/tron.png", "/coins/ton.png"];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
       {/* 1. Header (Always Visible) */}
@@ -32,12 +34,15 @@ export default function Home() {
             {/* Hero Content */}
             <div className="relative z-10">
               <div className="relative z-10 flex flex-col items-center text-center">
+                {/* Main Image with title */}
                 <div className="relative inline-block mx-auto">
                   <img
                     src="/icon.png"
                     alt="GattaiSwap Character"
                     className="max-w-xs md:max-w-sm rounded-xl"
                   />
+
+                  {/* Title over image */}
                   <div className="absolute bottom-14 left-0 right-0 flex flex-col items-center text-center px-4">
                     <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight leading-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-400 via-blue-50 to-blue-400 drop-shadow-lg">
                       GattaiSwap
@@ -48,6 +53,18 @@ export default function Home() {
                       Fusion unleashed. Chains united.
                     </p>
                   </div>
+                </div>
+
+                {/* Floating Coins */}
+                <div className="relative mt-8 flex flex-wrap justify-center gap-6">
+                  {coins.map((src, i) => (
+                    <img
+                      key={i}
+                      src={src}
+                      alt={`coin-${i}`}
+                      className={`w-12 h-12 md:w-16 md:h-16 object-contain animate-floating coin-float-${i}`}
+                    />
+                  ))}
                 </div>
               </div>
 
