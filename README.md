@@ -1,1 +1,3 @@
-# 2025-unite
+# DexGogeta
+
+Fusion unleashed. Chains united.
