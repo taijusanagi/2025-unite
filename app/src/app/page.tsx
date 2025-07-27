@@ -251,7 +251,7 @@ export default function Home() {
 
     if (!resolverRes.ok) {
       console.error("Failed to resolve order:", resolverData.error);
-      toast.error(`Resolve failed ❌: ${resolverData.error}`);
+      toast.error(`Resolve failed: ${resolverData.error}`);
       return;
     }
 
@@ -264,14 +264,25 @@ export default function Home() {
     await new Promise((resolve) => setTimeout(resolve, 11000));
 
     console.log("Withdrawing from destination escrow...");
-    const resolver = new Resolver(
-      config[srcChainId].resolver,
-      config[dstChainId].resolver
-    );
+    const withdrawRes = await fetch("/relayer/withdraw", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        srcChainId,
+        dstChainId,
+        dstEscrowAddress,
+        secret,
+        dstImmutables,
+      }),
+    });
 
-    await signer.sendTransaction(
-      resolver.withdraw("dst", dstEscrowAddress, secret, dstImmutables)
-    );
+    const { error } = await withdrawRes.json();
+
+    if (!withdrawRes.ok) {
+      console.error("Withdraw route error:", error);
+      toast.error(`Withdraw failed: ${error}`);
+      return;
+    }
 
     const resolverWithSecretRes = await fetch("/resolver", {
       method: "POST",
@@ -288,7 +299,7 @@ export default function Home() {
         "Failed to withdraw from destination escrow:",
         resolverWithSecretData.error
       );
-      toast.error(`Withdraw failed ❌: ${resolverWithSecretData.error}`);
+      toast.error(`Withdraw failed: ${resolverWithSecretData.error}`);
       return;
     }
 
