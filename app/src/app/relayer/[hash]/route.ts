@@ -12,7 +12,7 @@ export async function GET(
     if (params.hash === "all") {
       const all = await redis.hGetAll("orders");
       const parsed = Object.entries(all).map(([hash, json]) => {
-        const { secret, ...rest } = JSON.parse(json);
+        const { ...rest } = JSON.parse(json);
         return { hash, ...rest };
       });
       return NextResponse.json(parsed);
@@ -23,7 +23,7 @@ export async function GET(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    const { secret, ...rest } = JSON.parse(data);
+    const { ...rest } = JSON.parse(data);
     return NextResponse.json({ hash: params.hash, ...rest });
   } catch (err) {
     console.error(err);
