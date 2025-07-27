@@ -3,15 +3,37 @@ import React, { useState } from "react";
 import { FaGithub } from "react-icons/fa";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { uint8ArrayToHex } from "@1inch/byte-utils";
+import { uint8ArrayToHex, UINT_256_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
 
 import * as Sdk from "@1inch/cross-chain-sdk";
+
+import { Contract } from "ethers";
+import { useEthersSigner } from "@/hooks/useEthersSigner";
+import IWETHContract from "@/lib/contracts/IWETH.json";
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
 
   const coins = ["/coins/monad.png", "/coins/tron.png", "/coins/ton.png"];
+
+  const config: Record<
+    number,
+    { wrappedNative: string; limitOrderProtocol: string }
+  > = {
+    84532: {
+      wrappedNative: "0x1bdd24840e119dc2602dcc587dd182812427a5cc",
+      limitOrderProtocol: "0xbC4F8be648a7d7783918E80761857403835111fd",
+    },
+    421614: {
+      wrappedNative: "0x2836ae2ea2c013acd38028fd0c77b92cccfa2ee4",
+      limitOrderProtocol: "0x3fd6bdD2c7a06159D7762D06316eCac7c173763a",
+    },
+    10143: {
+      wrappedNative: "0x760afe86e5de5fa0ee542fc7b7b713e1c5425701",
+      limitOrderProtocol: "0x3c63B9da5DA101F36061C9503a06906031D7457c",
+    },
+  };
 
   const chains = [
     { name: "Base Sepolia", symbol: "ETH", chainId: 84532 },
@@ -23,8 +45,23 @@ export default function Home() {
   const [toChain, setToChain] = useState(chains[1]);
 
   const [amount, setAmount] = useState("");
+  const signer = useEthersSigner();
 
-  const createOrder = () => {
+  const createOrder = async () => {
+    if (!signer) {
+      console.error("Signer not defined");
+      return;
+    }
+    console.log("signer", signer);
+    console.log("Sdk", Sdk);
+
+    const srcWrappedNativeTokenContract = new Contract(
+      config[fromChain.chainId].wrappedNative,
+      IWETHContract.abi,
+      signer
+    );
+    console.log("srcWrappedNativeTokenContract", srcWrappedNativeTokenContract);
+
     const secret = uint8ArrayToHex(randomBytes(32));
     console.log("secret", secret);
 
@@ -36,7 +73,37 @@ export default function Home() {
     const timestamp = BigInt(Math.floor(Date.now() / 1000));
     console.log("timestamp", timestamp);
 
-    console.log("Sdk", Sdk);
+    const balance = await srcWrappedNativeTokenContract.balanceOf(
+      signer.address
+    );
+
+    if (balance < amount) {
+      console.log("Insufficient balance, depositing...");
+      const tx = await srcWrappedNativeTokenContract.deposit({
+        value: amount,
+      });
+      await tx.wait();
+      console.log("Deposit successful");
+    } else {
+      console.log("Sufficient balance, no deposit needed");
+    }
+
+    const allowance = await srcWrappedNativeTokenContract.allowance(
+      signer.address,
+      config[fromChain.chainId].limitOrderProtocol
+    );
+
+    if (allowance < UINT_256_MAX) {
+      console.log("Insufficient allowance, approving...");
+      const tx = await srcWrappedNativeTokenContract.approve(
+        config[fromChain.chainId].limitOrderProtocol,
+        UINT_256_MAX
+      );
+      await tx.wait();
+      console.log("Approval successful");
+    } else {
+      console.log("Sufficient allowance, no approval needed");
+    }
   };
 
   return (
