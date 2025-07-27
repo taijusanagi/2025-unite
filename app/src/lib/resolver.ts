@@ -67,16 +67,20 @@ export class Resolver {
 
   public withdraw(
     side: "src" | "dst",
-    escrow: Sdk.Address,
+    // escrow: Sdk.Address,
+    escrow: string,
     secret: string,
-    immutables: Sdk.Immutables
+    // immutables: Sdk.Immutables
+    immutables: Sdk.ImmutablesData
   ): TransactionRequest {
     return {
       to: side === "src" ? this.srcAddress : this.dstAddress,
       data: this.iface.encodeFunctionData("withdraw", [
-        escrow.toString(),
+        // escrow.toString(),
+        escrow,
         secret,
-        immutables.build(),
+        // immutables.build(),
+        immutables,
       ]),
     };
   }

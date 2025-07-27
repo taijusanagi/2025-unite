@@ -11,7 +11,7 @@ const privateKey = process.env.PRIVATE_KEY || "0x";
 
 export async function POST(req: Request) {
   try {
-    const { hash } = await req.json();
+    const { hash, secret, srcImmutables, srcEscrowAddress } = await req.json();
     if (!hash) {
       return NextResponse.json({ error: "Missing hash" }, { status: 400 });
     }
@@ -32,7 +32,6 @@ export async function POST(req: Request) {
       order: _order,
       extension,
       signature,
-      secret,
     } = await response.json();
     const order = Sdk.CrossChainOrder.fromDataAndExtension(_order, extension);
     console.log("srcChainId", srcChainId);
@@ -59,76 +58,74 @@ export async function POST(req: Request) {
       config[dstChainId].resolver
     );
 
-    const fillAmount = order.makingAmount;
-    console.log("Deploying source escrow contract...");
-    const { blockHash: srcDeployBlock } = await srcResolverWallet.send(
-      resolver.deploySrc(
-        srcChainId,
-        order,
-        signature,
-        Sdk.TakerTraits.default()
-          .setExtension(order.extension)
-          .setAmountMode(Sdk.AmountMode.maker)
-          .setAmountThreshold(order.takingAmount),
-        fillAmount
-      )
-    );
-    console.log(`Source deployed at block hash: ${srcDeployBlock}`);
+    if (!secret || !srcImmutables) {
+      const fillAmount = order.makingAmount;
+      console.log("Deploying source escrow contract...");
+      const { blockHash: srcDeployBlock } = await srcResolverWallet.send(
+        resolver.deploySrc(
+          srcChainId,
+          order,
+          signature,
+          Sdk.TakerTraits.default()
+            .setExtension(order.extension)
+            .setAmountMode(Sdk.AmountMode.maker)
+            .setAmountThreshold(order.takingAmount),
+          fillAmount
+        )
+      );
+      console.log(`Source deployed at block hash: ${srcDeployBlock}`);
 
-    console.log("Fetching source deployment event...");
-    const srcEvent = await srcEscrowFactory.getSrcDeployEvent(srcDeployBlock);
-    console.log("Source deployment event fetched.");
+      console.log("Fetching source deployment event...");
+      const srcEvent = await srcEscrowFactory.getSrcDeployEvent(srcDeployBlock);
+      console.log("Source deployment event fetched.");
 
-    console.log("Constructing destination escrow immutables...");
-    const dstImmutables = srcEvent[0]
-      .withComplement(srcEvent[1])
-      .withTaker(new Address(resolver.dstAddress));
+      console.log("Constructing destination escrow immutables...");
+      const dstImmutables = srcEvent[0]
+        .withComplement(srcEvent[1])
+        .withTaker(new Address(resolver.dstAddress));
 
-    console.log("Deploying destination escrow contract...");
-    const { blockTimestamp: dstDeployedAt } = await dstResolverWallet.send(
-      resolver.deployDst(dstImmutables)
-    );
-    console.log(`Destination deployed at timestamp: ${dstDeployedAt}`);
+      console.log("Deploying destination escrow contract...");
+      const { blockTimestamp: dstDeployedAt } = await dstResolverWallet.send(
+        resolver.deployDst(dstImmutables)
+      );
+      console.log(`Destination deployed at timestamp: ${dstDeployedAt}`);
 
-    console.log("Calculating destination escrow address...");
-    const dstEscrowAddress = new Sdk.EscrowFactory(
-      new Address(config[dstChainId].escrowFactory)
-    ).getDstEscrowAddress(
-      srcEvent[0],
-      srcEvent[1],
-      dstDeployedAt,
-      new Address(resolver.dstAddress),
-      await dstEscrowFactory.getDestinationImpl()
-    );
-    console.log(`Destination escrow address: ${dstEscrowAddress}`);
+      console.log("Calculating destination escrow address...");
+      const dstEscrowAddress = new Sdk.EscrowFactory(
+        new Address(config[dstChainId].escrowFactory)
+      ).getDstEscrowAddress(
+        srcEvent[0],
+        srcEvent[1],
+        dstDeployedAt,
+        new Address(resolver.dstAddress),
+        await dstEscrowFactory.getDestinationImpl()
+      );
+      console.log(`Destination escrow address: ${dstEscrowAddress}`);
 
-    console.log("Calculating source escrow address...");
-    const srcEscrowAddress = new Sdk.EscrowFactory(
-      new Address(config[srcChainId].escrowFactory)
-    ).getSrcEscrowAddress(srcEvent[0], await srcEscrowFactory.getSourceImpl());
-    console.log(`Source escrow address: ${srcEscrowAddress}`);
+      console.log("Calculating source escrow address...");
+      const srcEscrowAddress = new Sdk.EscrowFactory(
+        new Address(config[srcChainId].escrowFactory)
+      ).getSrcEscrowAddress(
+        srcEvent[0],
+        await srcEscrowFactory.getSourceImpl()
+      );
+      console.log(`Source escrow address: ${srcEscrowAddress}`);
 
-    console.log("Waiting 11 seconds before withdrawing...");
-    await new Promise((resolve) => setTimeout(resolve, 11000));
-
-    console.log("Withdrawing from destination escrow...");
-    await dstResolverWallet.send(
-      resolver.withdraw(
-        "dst",
-        dstEscrowAddress,
-        secret,
-        dstImmutables.withDeployedAt(dstDeployedAt)
-      )
-    );
-    console.log("Withdrawal from destination complete.");
-
-    console.log("Withdrawing from source escrow...");
-    await srcResolverWallet.send(
-      resolver.withdraw("src", srcEscrowAddress, secret, srcEvent[0])
-    );
-    console.log("Withdrawal from source complete.");
-
-    return NextResponse.json({ success: true, hash });
+      return NextResponse.json({
+        success: true,
+        dstEscrowAddress: dstEscrowAddress.toString(),
+        srcEscrowAddress: srcEscrowAddress.toString(),
+        dstImmutables: dstImmutables.withDeployedAt(dstDeployedAt).build(),
+        srcImmutables: srcEvent[0].build(),
+      });
+    } else {
+      console.log("Withdrawing from source escrow...");
+      await srcResolverWallet.send(
+        resolver.withdraw("src", srcEscrowAddress, secret, srcImmutables)
+      );
+      console.log("Withdrawal from source complete.");
+      return NextResponse.json({ success: true });
+    }
   } catch (err) {
     console.error("Resolver error:", err);
     return NextResponse.json({ error: "Resolver failed" }, { status: 500 });
