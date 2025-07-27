@@ -3,16 +3,17 @@ import React, { useState } from "react";
 import { FaGithub } from "react-icons/fa";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { uint8ArrayToHex, UINT_256_MAX } from "@1inch/byte-utils";
+import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
 
 import * as Sdk from "@1inch/cross-chain-sdk";
 
-import { Contract } from "ethers";
+import { Contract, parseEther, parseUnits } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
 import IWETHContract from "@/lib/contracts/IWETH.json";
 import { toast } from "react-toastify";
 import { useChainId } from "wagmi";
+import { Address } from "@1inch/cross-chain-sdk";
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
@@ -21,19 +22,30 @@ export default function Home() {
 
   const config: Record<
     number,
-    { wrappedNative: string; limitOrderProtocol: string }
+    {
+      wrappedNative: string;
+      limitOrderProtocol: string;
+      escrowFactory: string;
+      resolver: string;
+    }
   > = {
     84532: {
       wrappedNative: "0x1bdd24840e119dc2602dcc587dd182812427a5cc",
       limitOrderProtocol: "0xbC4F8be648a7d7783918E80761857403835111fd",
+      escrowFactory: "0x99275358DC3931Bcb10FfDd4DFa6276C38D9a6f0",
+      resolver: "0x88049d50AAE11BAa334b5E86B6B90BaE078f5851",
     },
     421614: {
       wrappedNative: "0x2836ae2ea2c013acd38028fd0c77b92cccfa2ee4",
       limitOrderProtocol: "0x3fd6bdD2c7a06159D7762D06316eCac7c173763a",
+      escrowFactory: "0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224",
+      resolver: "0x915e0305E320317C9D77187b195a682858A254c0",
     },
     10143: {
       wrappedNative: "0x760afe86e5de5fa0ee542fc7b7b713e1c5425701",
       limitOrderProtocol: "0x3c63B9da5DA101F36061C9503a06906031D7457c",
+      escrowFactory: "0x73e5d195b5cf7eb46de86901ad941986e74921ca",
+      resolver: "0xF920618C3CF765cE5570A15665C50b3e3f287352",
     },
   };
 
@@ -46,7 +58,7 @@ export default function Home() {
   const [fromChain, setFromChain] = useState(chains[0]);
   const [toChain, setToChain] = useState(chains[1]);
 
-  const [amount, setAmount] = useState("");
+  const [amount, setAmount] = useState("0.001");
   const signer = useEthersSigner();
   const connectedChainId = useChainId();
 
@@ -61,12 +73,27 @@ export default function Home() {
       toast.error("Please switch to the from network.");
       return;
     }
+    if (amount == "0") {
+      console.error("Amount cannot be zero");
+      toast.error("Amount must be greater than zero.");
+      return;
+    }
+    if (Number(amount) > 0.001) {
+      console.error("Amount exceeds maximum limit");
+      toast.error("Amount cannot exceed 0.001 for sustainable demo.");
+      return;
+    }
 
     console.log("signer", signer);
     console.log("Sdk", Sdk);
 
+    const srcChainId = fromChain.chainId;
+    const dstChainId = toChain.chainId;
+    console.log("srcChainId", srcChainId);
+    console.log("dstChainId", dstChainId);
+
     const srcWrappedNativeTokenContract = new Contract(
-      config[fromChain.chainId].wrappedNative,
+      config[srcChainId].wrappedNative,
       IWETHContract.abi,
       signer
     );
@@ -74,11 +101,6 @@ export default function Home() {
 
     const secret = uint8ArrayToHex(randomBytes(32));
     console.log("secret", secret);
-
-    const srcChainId = fromChain.chainId;
-    const dstChainId = toChain.chainId;
-    console.log("srcChainId", srcChainId);
-    console.log("dstChainId", dstChainId);
 
     const timestamp = BigInt(Math.floor(Date.now() / 1000));
     console.log("timestamp", timestamp);
@@ -110,7 +132,7 @@ export default function Home() {
 
     const allowance = await srcWrappedNativeTokenContract.allowance(
       signer.address,
-      config[fromChain.chainId].limitOrderProtocol
+      config[srcChainId].limitOrderProtocol
     );
 
     if (allowance < UINT_256_MAX) {
@@ -118,7 +140,7 @@ export default function Home() {
       await toast.promise(
         (async () => {
           const tx = await srcWrappedNativeTokenContract.approve(
-            config[fromChain.chainId].limitOrderProtocol,
+            config[srcChainId].limitOrderProtocol,
             UINT_256_MAX
           );
           console.log("Approval transaction sent:", tx.hash);
@@ -134,6 +156,56 @@ export default function Home() {
     } else {
       console.log("Sufficient allowance, no approval needed");
     }
+
+    const order = Sdk.CrossChainOrder.new(
+      new Address(config[srcChainId].escrowFactory),
+      {
+        salt: Sdk.randBigInt(1000n),
+        maker: new Address(signer.address),
+        makingAmount: parseUnits(amount, 18),
+        takingAmount: parseUnits(amount, 18),
+        makerAsset: new Address(config[srcChainId].wrappedNative),
+        takerAsset: new Address(config[dstChainId].wrappedNative),
+      },
+      {
+        hashLock: Sdk.HashLock.forSingleFill(secret),
+        timeLocks: Sdk.TimeLocks.new({
+          srcWithdrawal: 10n, // 10sec finality lock for test
+          srcPublicWithdrawal: 120n, // 2m for private withdrawal
+          srcCancellation: 121n, // 1sec public withdrawal
+          srcPublicCancellation: 122n, // 1sec private cancellation
+          dstWithdrawal: 10n, // 10sec finality lock for test
+          dstPublicWithdrawal: 100n, // 100sec private withdrawal
+          dstCancellation: 101n, // 1sec public withdrawal
+        }),
+        srcChainId,
+        dstChainId,
+        srcSafetyDeposit: parseEther("0.001"),
+        dstSafetyDeposit: parseEther("0.001"),
+      },
+      {
+        auction: new Sdk.AuctionDetails({
+          initialRateBump: 0,
+          points: [],
+          duration: 120n,
+          startTime: timestamp,
+        }),
+        whitelist: [
+          {
+            address: new Address(config[srcChainId].resolver),
+            allowFrom: 0n,
+          },
+        ],
+        resolvingStartTime: 0n,
+      },
+      {
+        nonce: Sdk.randBigInt(UINT_40_MAX),
+        allowPartialFills: false,
+        allowMultipleFills: false,
+      }
+    );
+
+    console.log("order", order);
   };
 
   return (
