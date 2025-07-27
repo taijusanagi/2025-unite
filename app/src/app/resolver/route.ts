@@ -1,23 +1,11 @@
 import { NextResponse } from "next/server";
-import { recoverAddress, JsonRpcProvider } from "ethers";
+import { JsonRpcProvider } from "ethers";
 import * as Sdk from "@1inch/cross-chain-sdk";
 import { config } from "@/lib/config";
 import { Wallet } from "@/lib/wallet";
 import { Resolver } from "@/lib/resolver";
 import { EscrowFactory } from "@/lib/escrow-factory";
 import { Address } from "@1inch/cross-chain-sdk";
-// import { config } from "@/lib/config";
-
-// const Address = Sdk.Address;
-
-// const resolverPk = process.env.PRIVATE_KEY!;
-// const sourceResolverAddress = "0x88049d50AAE11BAa334b5E86B6B90BaE078f5851";
-// const destinationResolverAddress = "0x915e0305E320317C9D77187b195a682858A254c0";
-// const sourceEscrowFactory = "0x99275358DC3931Bcb10FfDd4DFa6276C38D9a6f0";
-// const dstEscrowFactory = "0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224";
-
-// const srcProvider = new JsonRpcProvider(config.chain.source.url);
-// const dstProvider = new JsonRpcProvider(config.chain.destination.url);
 
 const privateKey = process.env.PRIVATE_KEY || "0x";
 
