@@ -16,6 +16,7 @@ import { toast } from "react-toastify";
 import { useChainId } from "wagmi";
 import { Address } from "@1inch/cross-chain-sdk";
 import { config } from "@/lib/config";
+import { Resolver } from "@/lib/resolver";
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
@@ -222,22 +223,20 @@ export default function Home() {
           order: order.build(),
           extension: order.extension,
           signature,
-          secret,
         },
         (_, value) => (typeof value === "bigint" ? value.toString() : value)
       ),
     });
 
-    const data = await res.json();
+    const relayerData = await res.json();
 
     if (!res.ok) {
-      console.error("Failed to store order:", data.error);
-      toast.error(`Failed to store order: ${data.error}`);
+      console.error("Failed to store order:", relayerData.error);
+      toast.error(`Failed to store order: ${relayerData.error}`);
       return;
     }
 
-    console.log("Order stored successfully:", data);
-    toast.success(`Order stored ✅ Hash: ${data.hash}`);
+    console.log("Order stored successfully:", relayerData);
 
     const resolverRes = await fetch("/resolver", {
       method: "POST",
@@ -251,12 +250,62 @@ export default function Home() {
 
     if (!resolverRes.ok) {
       console.error("Failed to resolve order:", resolverData.error);
-      toast.error(`Resolve failed ❌: ${resolverData.error}`);
+      toast.error(`Resolve failed: ${resolverData.error}`);
       return;
     }
 
-    console.log("Order resolved successfully:", resolverData);
-    toast.success(`Order resolved ✅ Hash: ${resolverData.hash}`);
+    console.log("Order processed successfully:", resolverData);
+
+    const { dstEscrowAddress, srcEscrowAddress, dstImmutables, srcImmutables } =
+      resolverData;
+
+    console.log("Waiting for finality...");
+    await new Promise((resolve) => setTimeout(resolve, 11000));
+
+    console.log("Withdrawing from destination escrow...");
+    const withdrawRes = await fetch("/relayer/withdraw", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        srcChainId,
+        dstChainId,
+        dstEscrowAddress,
+        secret,
+        dstImmutables,
+      }),
+    });
+
+    const { error } = await withdrawRes.json();
+
+    if (!withdrawRes.ok) {
+      console.error("Withdraw route error:", error);
+      toast.error(`Withdraw failed: ${error}`);
+      return;
+    }
+
+    const resolverWithSecretRes = await fetch("/resolver", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ hash, secret, srcImmutables, srcEscrowAddress }),
+    });
+
+    const resolverWithSecretData = await resolverWithSecretRes.json();
+
+    if (!resolverWithSecretRes.ok) {
+      console.error(
+        "Failed to withdraw from destination escrow:",
+        resolverWithSecretData.error
+      );
+      toast.error(`Withdraw failed: ${resolverWithSecretData.error}`);
+      return;
+    }
+
+    console.log(
+      "Withdrawal from destination complete:",
+      resolverWithSecretData
+    );
   };
 
   return (

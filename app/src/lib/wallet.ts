@@ -131,15 +131,25 @@ export class Wallet {
     const receipt = await res.wait(1);
 
     if (receipt && receipt.status) {
-      console.log("receipt", receipt);
+      // Retry logic to safely fetch block
+      const block = await this.getBlockWithRetry(receipt, 5, 1000);
+      if (!block) throw new Error("Block not found for transaction receipt.");
 
       return {
         txHash: receipt.hash,
-        blockTimestamp: BigInt((await receipt.getBlock())!.timestamp),
+        blockTimestamp: BigInt(block.timestamp),
         blockHash: receipt.blockHash as string,
       };
     }
 
     throw new Error((await receipt?.getResult()) || "unknown error");
+  }
+  private async getBlockWithRetry(receipt: any, retries = 3, delayMs = 1000) {
+    for (let i = 0; i < retries; i++) {
+      const block = await receipt.getBlock?.();
+      if (block) return block;
+      await new Promise((res) => setTimeout(res, delayMs));
+    }
+    return null;
   }
 }
