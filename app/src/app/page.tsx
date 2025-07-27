@@ -223,7 +223,6 @@ export default function Home() {
           order: order.build(),
           extension: order.extension,
           signature,
-          secret,
         },
         (_, value) => (typeof value === "bigint" ? value.toString() : value)
       ),
