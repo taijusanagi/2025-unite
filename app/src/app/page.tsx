@@ -51,9 +51,9 @@ export default function Home() {
   };
 
   const chains = [
-    { name: "Base Sepolia", symbol: "ETH", chainId: 84532 },
-    { name: "Arbitrum Sepolia", symbol: "ETH", chainId: 421614 },
-    { name: "Monad Testnet", symbol: "MON", chainId: 10143 },
+    { name: "Base Sepolia", symbol: "WETH", chainId: 84532 },
+    { name: "Arbitrum Sepolia", symbol: "WETH", chainId: 421614 },
+    { name: "Monad Testnet", symbol: "WMON", chainId: 10143 },
   ];
 
   const [fromChain, setFromChain] = useState(chains[0]);
@@ -225,6 +225,30 @@ export default function Home() {
     );
 
     console.log("signature", signature);
+
+    // This must be in backend, but for demo purposes we will send it to backend from app
+    const hash = order.getOrderHash(srcChainId);
+    // Prepare payload to send
+    const res = await fetch("/relayer/order", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ hash, order, signature, secret }, (_, value) =>
+        typeof value === "bigint" ? value.toString() : value
+      ),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error("Failed to store order:", data.error);
+      toast.error(`Failed to store order: ${data.error}`);
+      return;
+    }
+
+    console.log("Order stored successfully:", data);
+    toast.success(`Order stored ✅ Hash: ${data.hash}`);
   };
 
   return (
