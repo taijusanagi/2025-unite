@@ -11,6 +11,8 @@ import * as Sdk from "@1inch/cross-chain-sdk";
 import { Contract } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
 import IWETHContract from "@/lib/contracts/IWETH.json";
+import { toast } from "react-toastify";
+import { useChainId } from "wagmi";
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
@@ -46,12 +48,20 @@ export default function Home() {
 
   const [amount, setAmount] = useState("");
   const signer = useEthersSigner();
+  const connectedChainId = useChainId();
 
   const createOrder = async () => {
     if (!signer) {
       console.error("Signer not defined");
+      toast.error("Please connect your wallet first.");
       return;
     }
+    if (connectedChainId !== fromChain.chainId) {
+      console.error("Connected chain does not match fromChain");
+      toast.error("Please switch to the from network.");
+      return;
+    }
+
     console.log("signer", signer);
     console.log("Sdk", Sdk);
 
@@ -79,10 +89,20 @@ export default function Home() {
 
     if (balance < amount) {
       console.log("Insufficient balance, depositing...");
-      const tx = await srcWrappedNativeTokenContract.deposit({
-        value: amount,
-      });
-      await tx.wait();
+      await toast.promise(
+        (async () => {
+          const tx = await srcWrappedNativeTokenContract.deposit({
+            value: amount,
+          });
+          console.log("Deposit transaction sent:", tx.hash);
+          return await tx.wait();
+        })(),
+        {
+          pending: "Depositing native token...",
+          success: "Deposit successful ✅",
+          error: "Deposit failed ❌",
+        }
+      );
       console.log("Deposit successful");
     } else {
       console.log("Sufficient balance, no deposit needed");
@@ -95,11 +115,21 @@ export default function Home() {
 
     if (allowance < UINT_256_MAX) {
       console.log("Insufficient allowance, approving...");
-      const tx = await srcWrappedNativeTokenContract.approve(
-        config[fromChain.chainId].limitOrderProtocol,
-        UINT_256_MAX
+      await toast.promise(
+        (async () => {
+          const tx = await srcWrappedNativeTokenContract.approve(
+            config[fromChain.chainId].limitOrderProtocol,
+            UINT_256_MAX
+          );
+          console.log("Approval transaction sent:", tx.hash);
+          return await tx.wait();
+        })(),
+        {
+          pending: "Approving token allowance...",
+          success: "Approval successful ✅",
+          error: "Approval failed ❌",
+        }
       );
-      await tx.wait();
       console.log("Approval successful");
     } else {
       console.log("Sufficient allowance, no approval needed");
@@ -116,7 +146,7 @@ export default function Home() {
         >
           GattaiSwap
         </div>
-        <ConnectButton />
+        <ConnectButton chainStatus="icon" accountStatus="avatar" />
       </div>
 
       {/* 2. Hero */}
