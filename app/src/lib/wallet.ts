@@ -124,7 +124,7 @@ export class Wallet {
   ): Promise<{ txHash: string; blockTimestamp: bigint; blockHash: string }> {
     const res = await this.signer.sendTransaction({
       ...param,
-      gasLimit: 10_000_000,
+      // gasLimit: 500_000,
       from: this.getAddress(),
     });
 
