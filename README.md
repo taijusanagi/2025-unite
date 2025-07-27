@@ -16,6 +16,20 @@ https://sepolia.basescan.org/address/0x88049d50AAE11BAa334b5E86B6B90BaE078f5851
 TrueERC20
 https://sepolia.basescan.org/address/0x93992AF843537Cf0A07E6638ABbbFB837111C753
 
+## Arbitrum Sepolia
+
+Limit Order Protocol
+https://sepolia.arbiscan.io/address/0x3fd6bdD2c7a06159D7762D06316eCac7c173763a
+
+Escrow Factory
+https://sepolia.arbiscan.io/address/0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224
+
+Resolver
+https://sepolia.arbiscan.io/address/0x915e0305E320317C9D77187b195a682858A254c0
+
+TrueERC20
+https://sepolia.arbiscan.io/address/0xd9daCF5a9b61F951373386216744A9F42710A6A7
+
 ## Monad
 
 Limit Order Protocol

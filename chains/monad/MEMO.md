@@ -26,6 +26,32 @@ forge create contracts/src/ERC20True.sol:ERC20True -r "https://sepolia.base.org"
 forge verify-contract 0x93992AF843537Cf0A07E6638ABbbFB837111C753 contracts/src/ERC20True.sol:ERC20True --chain 84532 --watch
 ```
 
+### Arbitrum Sepolia
+
+```
+forge create contracts/lib/cross-chain-swap/contracts/EscrowFactory.sol:EscrowFactory -r "https://arbitrum-sepolia.api.onfinality.io/public" --broadcast --private-key <PRIVATE_KEY> --constructor-args 0x3fd6bdD2c7a06159D7762D06316eCac7c173763a 0x2836ae2ea2c013acd38028fd0c77b92cccfa2ee4 0x0000000000000000000000000000000000000000 0xc0797BD75cD3F34ee1CD046f03d9c85B36C2Fd01 1800 1800
+```
+
+```
+forge verify-contract 0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224 contracts/lib/cross-chain-swap/contracts/EscrowFactory.sol:EscrowFactory --chain 421614 --watch --constructor-args $(cast abi-encode "constructor(address,address,address,address,uint32,uint32)" 0x3fd6bdD2c7a06159D7762D06316eCac7c173763a 0x2836ae2ea2c013acd38028fd0c77b92cccfa2ee4 0x0000000000000000000000000000000000000000 0xc0797BD75cD3F34ee1CD046f03d9c85B36C2Fd01 1800 1800)
+```
+
+```
+forge create contracts/src/Resolver.sol:Resolver -r "https://arbitrum-sepolia.api.onfinality.io/public" --broadcast --private-key <PRIVATE_KEY> --constructor-args 0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224 0x3fd6bdD2c7a06159D7762D06316eCac7c173763a 0xc0797BD75cD3F34ee1CD046f03d9c85B36C2Fd01
+```
+
+```
+forge verify-contract 0x915e0305E320317C9D77187b195a682858A254c0 contracts/src/Resolver.sol:Resolver --chain 421614 --watch --constructor-args $(cast abi-encode "constructor(address,address,address)" 0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224 0x3fd6bdD2c7a06159D7762D06316eCac7c173763a 0xc0797BD75cD3F34ee1CD046f03d9c85B36C2Fd01)
+```
+
+```
+forge create contracts/src/ERC20True.sol:ERC20True -r "https://arbitrum-sepolia.api.onfinality.io/public" --broadcast --private-key <PRIVATE_KEY>
+```
+
+```
+forge verify-contract 0xd9daCF5a9b61F951373386216744A9F42710A6A7 contracts/src/ERC20True.sol:ERC20True --chain 421614 --watch
+```
+
 ### Monad Testnet
 
 ```

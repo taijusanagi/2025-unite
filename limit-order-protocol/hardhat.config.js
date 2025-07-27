@@ -29,6 +29,10 @@ networks["base-sepolia"] = {
     url: "https://sepolia.base.org",
     accounts,
 };
+networks["arbitrum-sepolia"] = {
+    url: "https://arbitrum-sepolia.api.onfinality.io/public",
+    accounts,
+};
 
 etherscan.apiKey["baseSepolia"] = process.env.BASESCAN_API_KEY || "";
 

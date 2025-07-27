@@ -28,9 +28,12 @@ const userPk = process.env.PRIVATE_KEY || "0x";
 const resolverPk = process.env.PRIVATE_KEY || "0x";
 
 const sourceResolverAddress = "0x88049d50AAE11BAa334b5E86B6B90BaE078f5851";
-const destinationResolverAddress = "0xF920618C3CF765cE5570A15665C50b3e3f287352";
+// const destinationResolverAddress = "0xF920618C3CF765cE5570A15665C50b3e3f287352";
 const sourceEscrowFactory = "0x99275358DC3931Bcb10FfDd4DFa6276C38D9a6f0";
-const dstEscrowFactory = "0x73e5d195b5cf7eb46de86901ad941986e74921ca";
+// const dstEscrowFactory = "0x73e5d195b5cf7eb46de86901ad941986e74921ca";
+
+const destinationResolverAddress = "0x915e0305E320317C9D77187b195a682858A254c0";
+const dstEscrowFactory = "0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224";
 
 const srcProvider = new JsonRpcProvider(
   config.chain.source.url,
@@ -56,6 +59,7 @@ const orders: any[] = [];
 app.get("/", async (req: Request, res: Response) => {
   res.send("Resolver API");
   console.log(orders);
+
   const depositAmount = parseEther("0.01");
 
   const srcUserWallet = new Wallet(userPk, srcProvider);
@@ -196,14 +200,15 @@ app.post("/create-order", async (req: Request, res: Response) => {
       {
         hashLock: Sdk.HashLock.forSingleFill(secret),
         timeLocks: Sdk.TimeLocks.new({
-          srcWithdrawal: 10n,
-          srcPublicWithdrawal: 120n,
-          srcCancellation: 121n,
-          srcPublicCancellation: 122n,
-          dstWithdrawal: 10n,
-          dstPublicWithdrawal: 100n,
-          dstCancellation: 101n,
+          srcWithdrawal: 10n, // 10sec finality lock for test
+          srcPublicWithdrawal: 120n, // 2m for private withdrawal
+          srcCancellation: 121n, // 1sec public withdrawal
+          srcPublicCancellation: 122n, // 1sec private cancellation
+          dstWithdrawal: 10n, // 10sec finality lock for test
+          dstPublicWithdrawal: 100n, // 100sec private withdrawal
+          dstCancellation: 101n, // 1sec public withdrawal
         }),
+
         srcChainId,
         dstChainId,
         srcSafetyDeposit: parseEther("0.001"),
@@ -255,6 +260,7 @@ app.post("/process-orders", async (req: Request, res: Response) => {
     console.log("Initializing resolvers...");
     const srcChainResolver = new Wallet(resolverPk, srcProvider);
     const dstChainResolver = new Wallet(resolverPk, dstProvider);
+
     const resolverContract = new Resolver(
       sourceResolverAddress,
       destinationResolverAddress
@@ -310,6 +316,7 @@ app.post("/process-orders", async (req: Request, res: Response) => {
         .withTaker(new Address(resolverContract.dstAddress));
 
       console.log("Deploying destination escrow contract...");
+
       const { blockTimestamp: dstDeployedAt } = await dstChainResolver.send(
         resolverContract.deployDst(dstImmutables)
       );

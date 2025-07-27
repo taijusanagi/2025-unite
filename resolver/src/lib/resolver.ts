@@ -51,6 +51,13 @@ export class Resolver {
      */
     immutables: Sdk.Immutables
   ): TransactionRequest {
+    console.log("immutables", immutables);
+
+    console.log(
+      "immutables.timeLocks.toSrcTimeLocks().privateCancellation",
+      immutables.timeLocks.toSrcTimeLocks().privateCancellation
+    );
+
     return {
       to: this.dstAddress,
       data: this.iface.encodeFunctionData("deployDst", [
