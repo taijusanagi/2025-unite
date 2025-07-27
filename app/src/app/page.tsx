@@ -2,10 +2,21 @@
 import React, { useState } from "react";
 import { FaGithub } from "react-icons/fa";
 
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+
 export default function Home() {
   const [showDex, setShowDex] = useState(false);
 
   const coins = ["/coins/monad.png", "/coins/tron.png", "/coins/ton.png"];
+
+  const chains = [
+    { name: "Base Sepolia", symbol: "ETH", chainId: 84532 },
+    { name: "Arbitrum Sepolia", symbol: "ETH", chainId: 421614 },
+    { name: "Monad Testnet", symbol: "MON", chainId: 10143 },
+  ];
+
+  const [fromChain, setFromChain] = useState(chains[0]);
+  const [toChain, setToChain] = useState(chains[1]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
@@ -17,9 +28,7 @@ export default function Home() {
         >
           GattaiSwap
         </div>
-        <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition cursor-pointer">
-          Connect Wallet
-        </button>
+        <ConnectButton />
       </div>
 
       {/* 2. Hero */}
@@ -90,10 +99,20 @@ export default function Home() {
             <div className="space-y-2">
               <label className="block text-sm text-gray-300">From</label>
               <div className="flex space-x-2">
-                <select className="flex-1 px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                  <option>Ethereum</option>
-                  <option>BNB Chain</option>
-                  <option>Polygon</option>
+                <select
+                  className="flex-1 px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  value={fromChain.chainId}
+                  onChange={(e) =>
+                    setFromChain(
+                      chains.find((c) => c.chainId === Number(e.target.value))!
+                    )
+                  }
+                >
+                  {chains.map((chain) => (
+                    <option key={chain.chainId} value={chain.chainId}>
+                      {chain.name} ({chain.symbol})
+                    </option>
+                  ))}
                 </select>
                 <input
                   type="number"
@@ -102,33 +121,28 @@ export default function Home() {
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1">
-                Token: Auto-selected per chain
+                Token: {fromChain.symbol}
               </p>
-            </div>
-
-            {/* Swap Arrow */}
-            <div className="text-center">
-              <div className="inline-block p-2 rounded-md bg-blue-600/30">
-                <svg
-                  className="w-5 h-5 text-blue-400"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={2.5}
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
             </div>
 
             {/* To Section */}
             <div className="space-y-2">
               <label className="block text-sm text-gray-300">To</label>
               <div className="flex space-x-2">
-                <select className="flex-1 px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-cyan-500 cursor-pointer">
-                  <option>Polygon</option>
-                  <option>BNB Chain</option>
-                  <option>Ethereum</option>
+                <select
+                  className="flex-1 px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-cyan-500 cursor-pointer"
+                  value={toChain.chainId}
+                  onChange={(e) =>
+                    setToChain(
+                      chains.find((c) => c.chainId === Number(e.target.value))!
+                    )
+                  }
+                >
+                  {chains.map((chain) => (
+                    <option key={chain.chainId} value={chain.chainId}>
+                      {chain.name} ({chain.symbol})
+                    </option>
+                  ))}
                 </select>
                 <input
                   type="text"
@@ -138,7 +152,7 @@ export default function Home() {
                 />
               </div>
               <p className="text-xs text-gray-400 mt-1">
-                Token: Auto-selected per chain
+                Token: {toChain.symbol}
               </p>
             </div>
 
