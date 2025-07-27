@@ -125,6 +125,8 @@ export class Wallet {
   ): Promise<string> {
     const typedData = order.getTypedData(srcChainId);
 
+    console.log("typedData", typedData);
+
     return this.signer.signTypedData(
       typedData.domain,
       { Order: typedData.types[typedData.primaryType] },
