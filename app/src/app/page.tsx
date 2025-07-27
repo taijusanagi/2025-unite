@@ -3,9 +3,13 @@ import React, { useState } from "react";
 import { FaGithub } from "react-icons/fa";
 
 import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { uint8ArrayToHex } from "@1inch/byte-utils";
+import { randomBytes } from "crypto";
+
+import * as Sdk from "@1inch/cross-chain-sdk";
 
 export default function Home() {
-  const [showDex, setShowDex] = useState(false);
+  const [showDex, setShowDex] = useState(true);
 
   const coins = ["/coins/monad.png", "/coins/tron.png", "/coins/ton.png"];
 
@@ -19,6 +23,21 @@ export default function Home() {
   const [toChain, setToChain] = useState(chains[1]);
 
   const [amount, setAmount] = useState("");
+
+  const createOrder = () => {
+    const secret = uint8ArrayToHex(randomBytes(32));
+    console.log("secret", secret);
+
+    const srcChainId = fromChain.chainId;
+    const dstChainId = toChain.chainId;
+    console.log("srcChainId", srcChainId);
+    console.log("dstChainId", dstChainId);
+
+    const timestamp = BigInt(Math.floor(Date.now() / 1000));
+    console.log("timestamp", timestamp);
+
+    console.log("Sdk", Sdk);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
@@ -161,8 +180,11 @@ export default function Home() {
             </div>
 
             {/* Swap Button */}
-            <button className="w-full py-3 mt-4 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer">
-              Swap Now
+            <button
+              className="w-full py-3 mt-4 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
+              onClick={createOrder}
+            >
+              Create Order
             </button>
           </div>
         </div>
