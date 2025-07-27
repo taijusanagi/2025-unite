@@ -154,14 +154,14 @@ app.get("/", async (req: Request, res: Response) => {
 
   const dstAllowance = await dstWrappedNativeTokenContract.allowance(
     destinationResolverAddress,
-    config.chain.destination.limitOrderProtocol
+    dstEscrowFactory
   );
 
   if (dstAllowance < UINT_256_MAX) {
     console.log("Insufficient allowance on destination chain, approving...");
     const functionData =
       dstWrappedNativeTokenContract.interface.encodeFunctionData("approve", [
-        config.chain.destination.limitOrderProtocol,
+        dstEscrowFactory,
         UINT_256_MAX,
       ]);
     const tx = await dstResolverContract.arbitraryCalls(
@@ -339,6 +339,9 @@ app.post("/process-orders", async (req: Request, res: Response) => {
         new Address(sourceEscrowFactory)
       ).getSrcEscrowAddress(srcEvent[0], await srcFactory.getSourceImpl());
       console.log(`Source escrow address: ${srcEscrowAddress}`);
+
+      console.log("Waiting 11 seconds before withdrawing...");
+      await new Promise((resolve) => setTimeout(resolve, 11000));
 
       console.log("Withdrawing from destination escrow...");
       await dstChainResolver.send(

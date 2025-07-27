@@ -43,3 +43,10 @@ https://testnet.monadexplorer.com/address/0xF920618C3CF765cE5570A15665C50b3e3f28
 
 TrueERC20
 https://testnet.monadexplorer.com/address/0xf927004F33f26CaA1763BB21454Ef36AA76e1064
+
+## Patch on SDK
+
+- limit-order-sdk/dist/cjs/limit-order/eip712/domain.js
+- limit-order-sdk/dist/cjs/constant.js
+- cross-chain-sdk/dist/cjs/chain.js
+- cross-chain-sdk/dist/cjs/deployment.js
