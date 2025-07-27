@@ -6,6 +6,7 @@ import {
   randomBytes,
   JsonRpcProvider,
   Contract,
+  recoverAddress,
 } from "ethers";
 import { uint8ArrayToHex, UINT_40_MAX, UINT_256_MAX } from "@1inch/byte-utils";
 import * as Sdk from "@1inch/cross-chain-sdk";
@@ -230,7 +231,12 @@ app.post("/create-order", async (req: Request, res: Response) => {
       }
     );
 
+    console.log("order", order);
+
     const signature = await srcUserWallet.signOrder(srcChainId, order);
+
+    console.log("signature", signature);
+
     if (orders.length == 0) {
       orders.push({ order, signature, secret });
     } else {
@@ -260,6 +266,13 @@ app.post("/process-orders", async (req: Request, res: Response) => {
     for (const [index, entry] of orders.entries()) {
       console.log(`\nProcessing order ${index + 1}/${orders.length}`);
       const { order, signature, secret } = entry;
+
+      const orderHash = order.getOrderHash(config.chain.source.chainId);
+      console.log(`Order hash: ${orderHash}`);
+
+      const signer = recoverAddress(orderHash, signature);
+
+      console.log("Recovered address:", signer);
 
       const fillAmount = order.makingAmount;
       console.log("Deploying source escrow contract...");
@@ -337,7 +350,7 @@ app.post("/process-orders", async (req: Request, res: Response) => {
       );
       console.log("Withdrawal from source complete.");
 
-      const orderHash = order.getOrderHash(config.chain.source.chainId);
+      // const orderHash = order.getOrderHash(config.chain.source.chainId);
       processed.push(orderHash);
       console.log(`Order processed: ${orderHash}`);
     }

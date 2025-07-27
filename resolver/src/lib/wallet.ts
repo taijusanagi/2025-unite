@@ -6,7 +6,7 @@ import {
   TransactionRequest,
   Wallet as PKWallet,
 } from "ethers";
-import Sdk from "@1inch/cross-chain-sdk";
+import * as Sdk from "@1inch/cross-chain-sdk";
 import ERC20 from "./contracts/IERC20.json";
 
 const coder = AbiCoder.defaultAbiCoder();
@@ -140,6 +140,7 @@ export class Wallet {
       gasLimit: 10_000_000,
       from: this.getAddress(),
     });
+
     const receipt = await res.wait(1);
 
     if (receipt && receipt.status) {
