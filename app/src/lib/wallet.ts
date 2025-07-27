@@ -6,7 +6,7 @@ import {
   TransactionRequest,
   Wallet as PKWallet,
 } from "ethers";
-import * as Sdk from "@1inch/cross-chain-sdk";
+
 import ERC20 from "./contracts/IERC20.json";
 
 const coder = AbiCoder.defaultAbiCoder();
@@ -117,21 +117,6 @@ export class Wallet {
     });
 
     await tx.wait();
-  }
-
-  public async signOrder(
-    srcChainId: number,
-    order: Sdk.CrossChainOrder
-  ): Promise<string> {
-    const typedData = order.getTypedData(srcChainId);
-
-    console.log("typedData", typedData);
-
-    return this.signer.signTypedData(
-      typedData.domain,
-      { Order: typedData.types[typedData.primaryType] },
-      typedData.message
-    );
   }
 
   async send(

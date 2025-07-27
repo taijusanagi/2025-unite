@@ -27,9 +27,6 @@ export class Resolver {
       hashLock
     );
 
-    console.log("order", order);
-    console.log("order.build()", order.build());
-
     return {
       to: this.srcAddress,
       data: this.iface.encodeFunctionData("deploySrc", [
