@@ -1,0 +1,44 @@
+diff --git a/node_modules/@1inch/cross-chain-sdk/dist/cjs/chains.js b/node_modules/@1inch/cross-chain-sdk/dist/cjs/chains.js
+index 4b4e3a6..a363d42 100644
+--- a/node_modules/@1inch/cross-chain-sdk/dist/cjs/chains.js
++++ b/node_modules/@1inch/cross-chain-sdk/dist/cjs/chains.js
+@@ -14,7 +14,10 @@ exports.SupportedChains = [
+     fusion_sdk_1.NetworkEnum.ZKSYNC,
+     fusion_sdk_1.NetworkEnum.LINEA,
+     fusion_sdk_1.NetworkEnum.SONIC,
+-    fusion_sdk_1.NetworkEnum.UNICHAIN
++    fusion_sdk_1.NetworkEnum.UNICHAIN,
++    84532, // Base Sepolia
++    10143, // Monad Testnet
++    421614, // Arbitrum Sepolia
+ ];
+ const isSupportedChain = (chain) => exports.SupportedChains.includes(chain);
+ exports.isSupportedChain = isSupportedChain;
+diff --git a/node_modules/@1inch/cross-chain-sdk/dist/cjs/deployments.js b/node_modules/@1inch/cross-chain-sdk/dist/cjs/deployments.js
+index ef35bdf..e1d218f 100644
+--- a/node_modules/@1inch/cross-chain-sdk/dist/cjs/deployments.js
++++ b/node_modules/@1inch/cross-chain-sdk/dist/cjs/deployments.js
+@@ -4,6 +4,11 @@ exports.ESCROW_FACTORY = exports.ESCROW_DST_IMPLEMENTATION = exports.ESCROW_SRC_
+ const fusion_sdk_1 = require("@1inch/fusion-sdk");
+ const TrueERC20 = new fusion_sdk_1.Address('0xda0000d4000015a526378bb6fafc650cea5966f8');
+ const ZKTrueERC20 = new fusion_sdk_1.Address('0xd66097c27eb8dee404bac235737932260edc6f3b');
++
++const BASE_SEPOLIA_TRUE_ERC20 = new fusion_sdk_1.Address('0x93992AF843537Cf0A07E6638ABbbFB837111C753');
++const MONAD_TRUE_ERC20 = new fusion_sdk_1.Address('0xf927004F33f26CaA1763BB21454Ef36AA76e1064');
++const ARBITRUM_SEPOLIA_TRUE_ERC20 = new fusion_sdk_1.Address('0xd9daCF5a9b61F951373386216744A9F42710A6A7');
++
+ exports.TRUE_ERC20 = {
+     [fusion_sdk_1.NetworkEnum.ETHEREUM]: TrueERC20,
+     [fusion_sdk_1.NetworkEnum.POLYGON]: TrueERC20,
+@@ -17,7 +22,10 @@ exports.TRUE_ERC20 = {
+     [fusion_sdk_1.NetworkEnum.ZKSYNC]: ZKTrueERC20,
+     [fusion_sdk_1.NetworkEnum.LINEA]: TrueERC20,
+     [fusion_sdk_1.NetworkEnum.SONIC]: TrueERC20,
+-    [fusion_sdk_1.NetworkEnum.UNICHAIN]: TrueERC20
++    [fusion_sdk_1.NetworkEnum.UNICHAIN]: TrueERC20,
++    84532: BASE_SEPOLIA_TRUE_ERC20, // Base Sepolia
++    421614: ARBITRUM_SEPOLIA_TRUE_ERC20, // Arbitrum Sepolia
++    10143: MONAD_TRUE_ERC20 // Monad Testnet
+ };
+ const ESCROW_FACTORY_ADDRESS = new fusion_sdk_1.Address('0xa7bcb4eac8964306f9e3764f67db6a7af6ddf99a');
+ const ESCROW_ZK_FACTORY_ADDRESS = new fusion_sdk_1.Address('0x584aeab186d81dbb52a8a14820c573480c3d4773');

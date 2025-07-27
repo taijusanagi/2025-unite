@@ -6,7 +6,8 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
 
-import * as Sdk from "@1inch/cross-chain-sdk";
+// Force to use the patched version
+const Sdk = require("@1inch/cross-chain-sdk");
 
 import { Contract, parseEther, parseUnits } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
