@@ -7,7 +7,7 @@ import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
 
 // Force to use the patched version
-const Sdk = require("@1inch/cross-chain-sdk");
+import * as Sdk from "@1inch/cross-chain-sdk";
 
 import { Contract, parseEther, parseUnits } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
@@ -207,6 +207,24 @@ export default function Home() {
     );
 
     console.log("order", order);
+
+    const typedData = order.getTypedData(srcChainId);
+    console.log("typedData", typedData);
+
+    const signature = await toast.promise(
+      signer.signTypedData(
+        typedData.domain,
+        { Order: typedData.types[typedData.primaryType] },
+        typedData.message
+      ),
+      {
+        pending: "Waiting for your signature...",
+        success: "Signature successful ✅",
+        error: "Signature rejected ❌",
+      }
+    );
+
+    console.log("signature", signature);
   };
 
   return (
