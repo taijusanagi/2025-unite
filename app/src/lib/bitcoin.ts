@@ -3,14 +3,11 @@ import axios from "axios";
 import * as ecc from "tiny-secp256k1";
 import { ECPairFactory, ECPairInterface } from "ecpair";
 
+type AddressType = "p2pkh" | "p2wpkh";
+
 const ECPair = ECPairFactory(ecc);
 
 const network = bitcoin.networks.testnet;
-
-const secret = Buffer.from(
-  "c06c1486fc3ebbf5b4ce0b12a6ca10f38f7a738c3de082946112b1fb68d7fe96",
-  "hex"
-);
 
 // Use WIF from environment if provided, else generate new
 const privKeyA =
@@ -81,7 +78,42 @@ async function broadcastTx(txHex: string): Promise<string> {
   return res.data;
 }
 
-type AddressType = "p2pkh" | "p2wpkh";
+async function waitForConfirmation(
+  txid: string,
+  maxTries = 30,
+  intervalMs = 10000
+): Promise<void> {
+  console.log(`⏳ Waiting for confirmation of TX: ${txid}...`);
+  let tries = 0;
+
+  while (tries < maxTries) {
+    try {
+      const res = await axios.get(
+        `https://blockstream.info/testnet/api/tx/${txid}/status`
+      );
+      const status = res.data;
+
+      if (status.confirmed) {
+        console.log(
+          `✅ Transaction ${txid} confirmed in block ${status.block_height}`
+        );
+        return;
+      } else {
+        console.log(`🔄 Not confirmed yet (try ${tries + 1}/${maxTries})`);
+      }
+    } catch (e) {
+      const err = e as Error;
+      console.error("Error checking tx status:", err.message);
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    tries++;
+  }
+
+  throw new Error(
+    `❌ Transaction ${txid} not confirmed after ${maxTries} attempts.`
+  );
+}
 
 async function sendBitcoin({
   fromWIF,
