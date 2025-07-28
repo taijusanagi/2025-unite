@@ -185,13 +185,13 @@ async function createMultisigToHTLCpsbt(): Promise<void> {
     bitcoin.opcodes.OP_SHA256,
     hash,
     bitcoin.opcodes.OP_EQUALVERIFY,
-    pubKeyB, // resolver
+    pubKeyB,
     bitcoin.opcodes.OP_CHECKSIG,
     bitcoin.opcodes.OP_ELSE,
     bitcoin.script.number.encode(lockTime),
     bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
     bitcoin.opcodes.OP_DROP,
-    pubKeyA, // maker
+    pubKeyA,
     bitcoin.opcodes.OP_CHECKSIG,
     bitcoin.opcodes.OP_ENDIF,
   ]);
@@ -201,7 +201,6 @@ async function createMultisigToHTLCpsbt(): Promise<void> {
     network,
   });
 
-  // 2-of-2 Multisig script (shared input ownership)
   const pubkeys = [pubKeyA, pubKeyB].sort((a, b) => a.compare(b));
   const multisigPayment = bitcoin.payments.p2wsh({
     redeem: bitcoin.payments.p2ms({ m: 2, pubkeys, network }),
@@ -210,7 +209,6 @@ async function createMultisigToHTLCpsbt(): Promise<void> {
 
   const fromAddress = multisigPayment.address!;
   const utxos = await getUtxos(fromAddress);
-
   if (!utxos.length) {
     console.error("No UTXOs in multisig wallet.");
     return;
@@ -219,7 +217,6 @@ async function createMultisigToHTLCpsbt(): Promise<void> {
   const fee = 1000;
   const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
   const amountToSend = totalInput - fee;
-
   if (amountToSend <= 0) {
     console.error("Insufficient balance in multisig.");
     return;
@@ -251,7 +248,6 @@ async function createMultisigToHTLCpsbt(): Promise<void> {
     value: amountToSend,
   });
 
-  // Maker signs their part only
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
       publicKey: pubKeyA,
@@ -259,25 +255,72 @@ async function createMultisigToHTLCpsbt(): Promise<void> {
     });
   });
 
+  psbt.signInput(0, {
+    publicKey: pubKeyB,
+    sign: (hash) => Buffer.from(keyPairB.sign(hash)),
+  });
+
   psbt.validateSignaturesOfInput(0, ecc.verify);
+  psbt.finalizeAllInputs();
 
-  // DO NOT finalize: resolver will co-sign
-  const base64Psbt = psbt.toBase64();
+  const txHex = psbt.extractTransaction().toHex();
+  const txid = await broadcastTx(txHex);
+  console.log("✅ Funded HTLC TXID:", txid);
 
-  console.log("========== Multisig-to-HTLC PSBT ==========");
-  console.log("🔐 HTLC Redeem Script (hex):");
-  console.log(htlcScript.toString("hex"));
-  console.log("\n📤 P2SH Output Script (scriptPubKey):");
-  console.log(p2sh.output!.toString("hex"));
-  console.log("🏦 HTLC Address (P2SH):", p2sh.address);
-  console.log("🔗 Multisig Input From Address:", fromAddress);
-  console.log(`💰 Value to lock: ${(amountToSend / 1e8).toFixed(8)} tBTC`);
-  console.log("\n🧾 Partially Signed PSBT (base64):");
-  console.log(base64Psbt);
-  console.log(
-    "\n📦 Share this PSBT with the resolver for co-signing and broadcast."
-  );
-  console.log("===========================================");
+  // === Step 2: Spend HTLC using secret ===
+  const htlcUtxos = await getUtxos(p2sh.address!);
+  if (!htlcUtxos.length) {
+    console.log("No UTXOs in HTLC.");
+    return;
+  }
+
+  const htlcUtxo = htlcUtxos[0];
+  const spendPsbt = new bitcoin.Psbt({ network });
+
+  const rawTxHex = (
+    await axios.get(
+      `https://blockstream.info/testnet/api/tx/${htlcUtxo.txid}/hex`
+    )
+  ).data;
+
+  spendPsbt.addInput({
+    hash: htlcUtxo.txid,
+    index: htlcUtxo.vout,
+    nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+    redeemScript: htlcScript,
+  });
+
+  spendPsbt.addOutput({
+    address: resolverBech32Address!,
+    value: htlcUtxo.value - 1000,
+  });
+
+  spendPsbt.signInput(0, {
+    publicKey: pubKeyB,
+    sign: (hash) => Buffer.from(keyPairB.sign(hash)),
+  });
+
+  spendPsbt.validateSignaturesOfInput(0, ecc.verify);
+
+  // Extract signature to manually construct scriptSig
+  const sig = spendPsbt.data.inputs[0].partialSig![0].signature;
+
+  const redeemInput = bitcoin.script.compile([
+    sig,
+    pubKeyB,
+    secret,
+    bitcoin.opcodes.OP_TRUE,
+    htlcScript,
+  ]);
+
+  spendPsbt.finalizeInput(0, () => ({
+    finalScriptSig: redeemInput,
+    finalScriptWitness: undefined,
+  }));
+
+  const finalTxHex = spendPsbt.extractTransaction().toHex();
+  const finalTxId = await broadcastTx(finalTxHex);
+  console.log("✅ HTLC Redeemed TXID:", finalTxId);
 }
 
 // Example usage
