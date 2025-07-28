@@ -119,12 +119,13 @@ async function sendBitcoin({
   fromType?: AddressType;
 }): Promise<void> {
   const keyPair = ECPair.fromWIF(fromWIF, network);
+  const pubkey = Buffer.from(keyPair.publicKey); // ← FIX HERE
 
   const payment = (() => {
     if (fromType === "p2wpkh") {
-      return bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network });
+      return bitcoin.payments.p2wpkh({ pubkey, network });
     } else {
-      return bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey, network });
+      return bitcoin.payments.p2pkh({ pubkey, network });
     }
   })();
 
@@ -159,14 +160,10 @@ async function sendBitcoin({
     };
 
     if (fromType === "p2wpkh") {
-      const value = utxo.value;
-      const scriptPubKey = bitcoin.payments.p2wpkh({
-        pubkey: keyPair.publicKey,
-        network,
-      }).output!;
+      const scriptPubKey = bitcoin.payments.p2wpkh({ pubkey, network }).output!;
       input.witnessUtxo = {
         script: scriptPubKey,
-        value,
+        value: utxo.value,
       };
     } else {
       input.nonWitnessUtxo = Buffer.from(rawTxHex, "hex");
@@ -190,7 +187,7 @@ async function sendBitcoin({
 
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
-      publicKey: Buffer.from(keyPair.publicKey),
+      publicKey: pubkey, // ← FIXED
       sign: (hash) => Buffer.from(keyPair.sign(hash)),
     });
   });
@@ -208,25 +205,36 @@ async function main() {
     "After funding, fetch the UTXO and construct redeem/refund tx.\n"
   );
 
-  const balances = {
-    senderP2PKH: await getBalance(senderLegacyAddress!),
-    senderP2WPKH: await getBalance(senderBech32Address!),
-    receiverP2PKH: await getBalance(receiverLegacyAddress!),
-    receiverP2WPKH: await getBalance(receiverBech32Address!),
-    htlc: await getBalance(p2shAddress!),
-  };
-
   const format = (sats: number) => (sats / 1e8).toFixed(8);
 
-  console.log(`Balance (Sender P2PKH): ${format(balances.senderP2PKH)} tBTC`);
-  console.log(`Balance (Sender P2WPKH): ${format(balances.senderP2WPKH)} tBTC`);
+  const senderP2PKHBalance = await getBalance(senderLegacyAddress!);
+  const senderP2WPKHBalance = await getBalance(senderBech32Address!);
+  const receiverP2PKHBalance = await getBalance(receiverLegacyAddress!);
+  const receiverP2WPKHBalance = await getBalance(receiverBech32Address!);
+  const htlcBalance = await getBalance(p2shAddress!);
+
+  console.log(`Balance (Sender P2PKH): ${format(senderP2PKHBalance)} tBTC`);
+  console.log(`Balance (Sender P2WPKH): ${format(senderP2WPKHBalance)} tBTC`);
+  console.log(`Balance (Receiver P2PKH): ${format(receiverP2PKHBalance)} tBTC`);
   console.log(
-    `Balance (Receiver P2PKH): ${format(balances.receiverP2PKH)} tBTC`
+    `Balance (Receiver P2WPKH): ${format(receiverP2WPKHBalance)} tBTC`
   );
-  console.log(
-    `Balance (Receiver P2WPKH): ${format(balances.receiverP2WPKH)} tBTC`
-  );
-  console.log(`Balance (HTLC P2SH): ${format(balances.htlc)} tBTC`);
+  console.log(`Balance (HTLC P2SH): ${format(htlcBalance)} tBTC`);
+
+  const fee = 10000;
+  const amountToSend = receiverP2WPKHBalance - fee;
+
+  if (amountToSend <= 0) {
+    console.error("Receiver P2WPKH has insufficient balance to cover fee.");
+    return;
+  }
+
+  await sendBitcoin({
+    fromWIF: privKeyB,
+    toAddress: senderLegacyAddress!,
+    amountSats: amountToSend,
+    fromType: "p2wpkh",
+  });
 
   //   await sendBtcFromP2PKHtoBech32();
 }
