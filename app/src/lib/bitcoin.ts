@@ -161,7 +161,7 @@ async function sendBitcoin({
 
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
-      publicKey: Buffer.from(keyPair.publicKey),
+      publicKey: pubkey,
       sign: (hash) => Buffer.from(keyPair.sign(hash)),
     });
   });
@@ -178,7 +178,7 @@ async function createAndExportHTLCpsbt(): Promise<void> {
     "hex"
   );
   const hash = bitcoin.crypto.sha256(secret);
-
+  const lockTime = 2640000; // A block height in the future
   // HTLC Script: Only resolver (taker) can claim with secret, user (maker) can refund after timeout
   const htlcScript = bitcoin.script.compile([
     bitcoin.opcodes.OP_IF,
@@ -202,7 +202,7 @@ async function createAndExportHTLCpsbt(): Promise<void> {
   });
 
   const keyPair = keyPairA;
-  const pubkey = keyPair.publicKey;
+  const pubkey = Buffer.from(keyPair.publicKey);
   const payment = bitcoin.payments.p2wpkh({ pubkey, network });
   const fromAddress = payment.address!;
   const utxos: UTXO[] = await getUtxos(fromAddress);
@@ -247,12 +247,12 @@ async function createAndExportHTLCpsbt(): Promise<void> {
 
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
-      publicKey: keyPair.publicKey,
-      sign: (hash) => keyPair.sign(hash),
+      publicKey: pubkey,
+      sign: (hash) => Buffer.from(keyPair.sign(hash)),
     });
   });
 
-  psbt.validateSignaturesOfAllInputs();
+  psbt.validateSignaturesOfAllInputs(ecc.verify);
   psbt.finalizeAllInputs();
 
   const base64Psbt = psbt.toBase64();
@@ -291,7 +291,6 @@ async function main() {
   console.log(
     `Balance (Resolver P2WPKH): ${format(resolverP2WPKHBalance)} tBTC`
   );
-  console.log(`Balance (HTLC P2SH): ${format(htlcBalance)} tBTC`);
 
   const fee = 100;
   const amountToSend = resolverP2WPKHBalance - fee;
