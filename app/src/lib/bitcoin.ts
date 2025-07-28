@@ -185,8 +185,8 @@ async function sendBitcoin({
 
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
-      publicKey: Buffer.from(keyPairA.publicKey),
-      sign: (hash) => Buffer.from(keyPairA.sign(hash)),
+      publicKey: Buffer.from(keyPair.publicKey),
+      sign: (hash) => Buffer.from(keyPair.sign(hash)),
     });
   });
 
@@ -227,12 +227,12 @@ async function main() {
     return;
   }
 
-  await sendBitcoin({
-    fromWIF: privKeyB,
-    toAddress: senderLegacyAddress!,
-    amountSats: amountToSend,
-    fromType: "p2wpkh",
-  });
+  //   await sendBitcoin({
+  //     fromWIF: privKeyB,
+  //     toAddress: senderLegacyAddress!,
+  //     amountSats: amountToSend,
+  //     fromType: "p2wpkh",
+  //   });
 
   //   await sendBtcFromP2PKHtoBech32();
 }
