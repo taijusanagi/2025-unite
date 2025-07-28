@@ -172,26 +172,26 @@ async function sendBitcoin({
   console.log("Broadcasted TXID:", txid);
 }
 
-async function createAndExportHTLCpsbt(): Promise<void> {
+async function createMultisigToHTLCpsbt(): Promise<void> {
   const secret = Buffer.from(
     "c06c1486fc3ebbf5b4ce0b12a6ca10f38f7a738c3de082946112b1fb68d7fe96",
     "hex"
   );
   const hash = bitcoin.crypto.sha256(secret);
-  const lockTime = 2640000; // A block height in the future
-  // HTLC Script: Only resolver (taker) can claim with secret, user (maker) can refund after timeout
+  const lockTime = 2640000;
+
   const htlcScript = bitcoin.script.compile([
     bitcoin.opcodes.OP_IF,
     bitcoin.opcodes.OP_SHA256,
     hash,
     bitcoin.opcodes.OP_EQUALVERIFY,
-    pubKeyB, // resolver can redeem with secret
+    pubKeyB, // resolver
     bitcoin.opcodes.OP_CHECKSIG,
     bitcoin.opcodes.OP_ELSE,
     bitcoin.script.number.encode(lockTime),
     bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
     bitcoin.opcodes.OP_DROP,
-    pubKeyA, // user can refund after timeout
+    pubKeyA, // maker
     bitcoin.opcodes.OP_CHECKSIG,
     bitcoin.opcodes.OP_ENDIF,
   ]);
@@ -201,14 +201,18 @@ async function createAndExportHTLCpsbt(): Promise<void> {
     network,
   });
 
-  const keyPair = keyPairA;
-  const pubkey = Buffer.from(keyPair.publicKey);
-  const payment = bitcoin.payments.p2wpkh({ pubkey, network });
-  const fromAddress = payment.address!;
-  const utxos: UTXO[] = await getUtxos(fromAddress);
+  // 2-of-2 Multisig script (shared input ownership)
+  const pubkeys = [pubKeyA, pubKeyB].sort((a, b) => a.compare(b));
+  const multisigPayment = bitcoin.payments.p2wsh({
+    redeem: bitcoin.payments.p2ms({ m: 2, pubkeys, network }),
+    network,
+  });
+
+  const fromAddress = multisigPayment.address!;
+  const utxos = await getUtxos(fromAddress);
 
   if (!utxos.length) {
-    console.error("No UTXOs available for HTLC PSBT.");
+    console.error("No UTXOs in multisig wallet.");
     return;
   }
 
@@ -217,7 +221,7 @@ async function createAndExportHTLCpsbt(): Promise<void> {
   const amountToSend = totalInput - fee;
 
   if (amountToSend <= 0) {
-    console.error("Insufficient balance for HTLC.");
+    console.error("Insufficient balance in multisig.");
     return;
   }
 
@@ -234,9 +238,11 @@ async function createAndExportHTLCpsbt(): Promise<void> {
       hash: utxo.txid,
       index: utxo.vout,
       witnessUtxo: {
-        script: payment.output!,
+        script: multisigPayment.output!,
         value: utxo.value,
       },
+      redeemScript: multisigPayment.redeem!.output,
+      witnessScript: multisigPayment.redeem!.output,
     });
   }
 
@@ -245,31 +251,33 @@ async function createAndExportHTLCpsbt(): Promise<void> {
     value: amountToSend,
   });
 
+  // Maker signs their part only
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
-      publicKey: pubkey,
-      sign: (hash) => Buffer.from(keyPair.sign(hash)),
+      publicKey: pubKeyA,
+      sign: (hash) => Buffer.from(keyPairA.sign(hash)),
     });
   });
 
-  psbt.validateSignaturesOfAllInputs(ecc.verify);
-  psbt.finalizeAllInputs();
+  psbt.validateSignaturesOfInput(0, ecc.verify);
 
+  // DO NOT finalize: resolver will co-sign
   const base64Psbt = psbt.toBase64();
 
-  console.log("========== HTLC PSBT EXPORT ==========");
+  console.log("========== Multisig-to-HTLC PSBT ==========");
   console.log("🔐 HTLC Redeem Script (hex):");
   console.log(htlcScript.toString("hex"));
   console.log("\n📤 P2SH Output Script (scriptPubKey):");
   console.log(p2sh.output!.toString("hex"));
-  console.log("\n🏦 HTLC Address (P2SH):", p2sh.address);
-  console.log(`🔒 Value to be locked: ${(amountToSend / 1e8).toFixed(8)} tBTC`);
+  console.log("🏦 HTLC Address (P2SH):", p2sh.address);
+  console.log("🔗 Multisig Input From Address:", fromAddress);
+  console.log(`💰 Value to lock: ${(amountToSend / 1e8).toFixed(8)} tBTC`);
   console.log("\n🧾 Partially Signed PSBT (base64):");
   console.log(base64Psbt);
   console.log(
-    "\n📦 Share this PSBT and HTLC script with the resolver to verify and broadcast."
+    "\n📦 Share this PSBT with the resolver for co-signing and broadcast."
   );
-  console.log("======================================");
+  console.log("===========================================");
 }
 
 // Example usage
