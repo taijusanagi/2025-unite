@@ -91,7 +91,7 @@ async function getUtxos(address: string): Promise<UTXO[]> {
 
 async function getBalance(address: string): Promise<number> {
   const utxos = await getUtxos(address);
-  return utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0) / 1e8;
+  return utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
 }
 
 async function broadcastTx(txHex: string): Promise<string> {
@@ -105,46 +105,100 @@ async function broadcastTx(txHex: string): Promise<string> {
   return res.data;
 }
 
-async function sendBtcFromP2PKHtoBech32(): Promise<void> {
-  const utxos: UTXO[] = await getUtxos(senderLegacyAddress!);
+type AddressType = "p2pkh" | "p2wpkh";
+
+async function sendBitcoin({
+  fromWIF,
+  toAddress,
+  amountSats,
+  fromType = "p2pkh",
+}: {
+  fromWIF: string;
+  toAddress: string;
+  amountSats: number;
+  fromType?: AddressType;
+}): Promise<void> {
+  const keyPair = ECPair.fromWIF(fromWIF, network);
+
+  const payment = (() => {
+    if (fromType === "p2wpkh") {
+      return bitcoin.payments.p2wpkh({ pubkey: keyPair.publicKey, network });
+    } else {
+      return bitcoin.payments.p2pkh({ pubkey: keyPair.publicKey, network });
+    }
+  })();
+
+  const fromAddress = payment.address!;
+  const utxos: UTXO[] = await getUtxos(fromAddress);
   if (!utxos.length) {
-    console.log("No UTXOs available to send from P2PKH address.");
+    console.error("No UTXOs available for", fromAddress);
+    return;
+  }
+
+  const fee = 1000;
+  const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
+
+  if (totalInput < amountSats + fee) {
+    console.error("Insufficient balance.");
     return;
   }
 
   const psbt = new bitcoin.Psbt({ network });
-  const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
-  const fee = 1000; // fixed fee for simplicity
-  const amountToSend = totalInput - fee;
 
   for (const utxo of utxos) {
     const rawTxRes = await axios.get(
       `https://blockstream.info/testnet/api/tx/${utxo.txid}/hex`
     );
     const rawTxHex = rawTxRes.data;
-    psbt.addInput({
+
+    const input = {
       hash: utxo.txid,
       index: utxo.vout,
-      nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
-    });
+      witnessUtxo: undefined as bitcoin.TxOutput | undefined,
+      nonWitnessUtxo: undefined as Buffer | undefined,
+    };
+
+    if (fromType === "p2wpkh") {
+      const value = utxo.value;
+      const scriptPubKey = bitcoin.payments.p2wpkh({
+        pubkey: keyPair.publicKey,
+        network,
+      }).output!;
+      input.witnessUtxo = {
+        script: scriptPubKey,
+        value,
+      };
+    } else {
+      input.nonWitnessUtxo = Buffer.from(rawTxHex, "hex");
+    }
+
+    psbt.addInput(input);
   }
 
   psbt.addOutput({
-    address: receiverBech32Address!,
-    value: amountToSend,
+    address: toAddress,
+    value: amountSats,
   });
+
+  const change = totalInput - amountSats - fee;
+  if (change > 0) {
+    psbt.addOutput({
+      address: fromAddress,
+      value: change,
+    });
+  }
 
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
-      publicKey: Buffer.from(keyPairA.publicKey),
-      sign: (hash) => Buffer.from(keyPairA.sign(hash)),
+      publicKey: Buffer.from(keyPair.publicKey),
+      sign: (hash) => Buffer.from(keyPair.sign(hash)),
     });
   });
 
   psbt.finalizeAllInputs();
   const txHex = psbt.extractTransaction().toHex();
   const txid = await broadcastTx(txHex);
-  console.log("Broadcasted P2PKH to Bech32 TXID:", txid);
+  console.log("Broadcasted TXID:", txid);
 }
 
 // Example usage
@@ -154,15 +208,27 @@ async function main() {
     "After funding, fetch the UTXO and construct redeem/refund tx.\n"
   );
 
-  const senderBalance = await getBalance(senderLegacyAddress!);
-  const receiverBalance = await getBalance(receiverLegacyAddress!);
-  const htlcBalance = await getBalance(p2shAddress!);
+  const balances = {
+    senderP2PKH: await getBalance(senderLegacyAddress!),
+    senderP2WPKH: await getBalance(senderBech32Address!),
+    receiverP2PKH: await getBalance(receiverLegacyAddress!),
+    receiverP2WPKH: await getBalance(receiverBech32Address!),
+    htlc: await getBalance(p2shAddress!),
+  };
 
-  console.log(`Balance (Sender): ${senderBalance} tBTC`);
-  console.log(`Balance (Receiver): ${receiverBalance} tBTC`);
-  console.log(`Balance (HTLC P2SH): ${htlcBalance} tBTC`);
+  const format = (sats: number) => (sats / 1e8).toFixed(8);
 
-  await sendBtcFromP2PKHtoBech32();
+  console.log(`Balance (Sender P2PKH): ${format(balances.senderP2PKH)} tBTC`);
+  console.log(`Balance (Sender P2WPKH): ${format(balances.senderP2WPKH)} tBTC`);
+  console.log(
+    `Balance (Receiver P2PKH): ${format(balances.receiverP2PKH)} tBTC`
+  );
+  console.log(
+    `Balance (Receiver P2WPKH): ${format(balances.receiverP2WPKH)} tBTC`
+  );
+  console.log(`Balance (HTLC P2SH): ${format(balances.htlc)} tBTC`);
+
+  //   await sendBtcFromP2PKHtoBech32();
 }
 
 main().catch(console.error);
