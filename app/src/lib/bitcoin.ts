@@ -119,20 +119,18 @@ async function sendBitcoin({
   fromType?: AddressType;
 }): Promise<void> {
   const keyPair = ECPair.fromWIF(fromWIF, network);
-  const pubkey = Buffer.from(keyPair.publicKey); // ← FIX HERE
+  const pubkey = Buffer.from(keyPair.publicKey);
 
-  const payment = (() => {
-    if (fromType === "p2wpkh") {
-      return bitcoin.payments.p2wpkh({ pubkey, network });
-    } else {
-      return bitcoin.payments.p2pkh({ pubkey, network });
-    }
-  })();
+  const payment =
+    fromType === "p2wpkh"
+      ? bitcoin.payments.p2wpkh({ pubkey, network })
+      : bitcoin.payments.p2pkh({ pubkey, network });
 
   const fromAddress = payment.address!;
   const utxos: UTXO[] = await getUtxos(fromAddress);
+
   if (!utxos.length) {
-    console.error("No UTXOs available for", fromAddress);
+    console.log("No UTXOs available for", fromAddress);
     return;
   }
 
@@ -147,29 +145,29 @@ async function sendBitcoin({
   const psbt = new bitcoin.Psbt({ network });
 
   for (const utxo of utxos) {
-    const rawTxRes = await axios.get(
-      `https://blockstream.info/testnet/api/tx/${utxo.txid}/hex`
-    );
-    const rawTxHex = rawTxRes.data;
-
-    const input = {
-      hash: utxo.txid,
-      index: utxo.vout,
-      witnessUtxo: undefined as bitcoin.TxOutput | undefined,
-      nonWitnessUtxo: undefined as Buffer | undefined,
-    };
+    const rawTxHex = (
+      await axios.get(
+        `https://blockstream.info/testnet/api/tx/${utxo.txid}/hex`
+      )
+    ).data;
 
     if (fromType === "p2wpkh") {
       const scriptPubKey = bitcoin.payments.p2wpkh({ pubkey, network }).output!;
-      input.witnessUtxo = {
-        script: scriptPubKey,
-        value: utxo.value,
-      };
+      psbt.addInput({
+        hash: utxo.txid,
+        index: utxo.vout,
+        witnessUtxo: {
+          script: scriptPubKey,
+          value: utxo.value,
+        },
+      });
     } else {
-      input.nonWitnessUtxo = Buffer.from(rawTxHex, "hex");
+      psbt.addInput({
+        hash: utxo.txid,
+        index: utxo.vout,
+        nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+      });
     }
-
-    psbt.addInput(input);
   }
 
   psbt.addOutput({
@@ -187,8 +185,8 @@ async function sendBitcoin({
 
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
-      publicKey: pubkey, // ← FIXED
-      sign: (hash) => Buffer.from(keyPair.sign(hash)),
+      publicKey: Buffer.from(keyPairA.publicKey),
+      sign: (hash) => Buffer.from(keyPairA.sign(hash)),
     });
   });
 
