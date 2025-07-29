@@ -7,7 +7,14 @@ type AddressType = "p2pkh" | "p2wpkh";
 
 const ECPair = ECPairFactory(ecc);
 
-const network = bitcoin.networks.testnet;
+const NETWORK = process.env.NETWORK === "regtest" ? "regtest" : "testnet";
+const network =
+  NETWORK === "regtest" ? bitcoin.networks.regtest : bitcoin.networks.testnet;
+
+const API_BASE =
+  NETWORK === "regtest"
+    ? "http://localhost:8094/regtest/api" // or whatever your Electrs or API port is
+    : "https://blockstream.info/testnet/api";
 
 // Use WIF from environment if provided, else generate new
 const privKeyA =
@@ -52,9 +59,7 @@ interface UTXO {
 }
 
 async function getUtxos(address: string): Promise<UTXO[]> {
-  const res = await axios.get(
-    `https://blockstream.info/testnet/api/address/${address}/utxo`
-  );
+  const res = await axios.get(`${API_BASE}/address/${address}/utxo`);
   return res.data.map((o: any) => ({
     txid: o.txid,
     vout: o.vout,
@@ -68,13 +73,9 @@ async function getBalance(address: string): Promise<number> {
 }
 
 async function broadcastTx(txHex: string): Promise<string> {
-  const res = await axios.post(
-    "https://blockstream.info/testnet/api/tx",
-    txHex,
-    {
-      headers: { "Content-Type": "text/plain" },
-    }
-  );
+  const res = await axios.post(`${API_BASE}/tx`, txHex, {
+    headers: { "Content-Type": "text/plain" },
+  });
   return res.data;
 }
 
@@ -88,9 +89,7 @@ async function waitForConfirmation(
 
   while (tries < maxTries) {
     try {
-      const res = await axios.get(
-        `https://blockstream.info/testnet/api/tx/${txid}/status`
-      );
+      const res = await axios.get(`${API_BASE}/tx/${txid}/status`);
       const status = res.data;
 
       if (status.confirmed) {
@@ -153,11 +152,7 @@ async function sendBitcoin({
   const psbt = new bitcoin.Psbt({ network });
 
   for (const utxo of utxos) {
-    const rawTxHex = (
-      await axios.get(
-        `https://blockstream.info/testnet/api/tx/${utxo.txid}/hex`
-      )
-    ).data;
+    const rawTxHex = (await axios.get(`${API_BASE}/tx/${utxo.txid}/hex`)).data;
 
     if (fromType === "p2wpkh") {
       const scriptPubKey = bitcoin.payments.p2wpkh({ pubkey, network }).output!;
@@ -257,11 +252,7 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
   const psbt = new bitcoin.Psbt({ network });
 
   for (const utxo of utxos) {
-    const rawTxHex = (
-      await axios.get(
-        `https://blockstream.info/testnet/api/tx/${utxo.txid}/hex`
-      )
-    ).data;
+    const rawTxHex = (await axios.get(`${API_BASE}/tx/${utxo.txid}/hex`)).data;
 
     psbt.addInput({
       hash: utxo.txid,
@@ -305,11 +296,8 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
   const htlcUtxo = htlcUtxos[0];
   const spendPsbt = new bitcoin.Psbt({ network });
 
-  const rawTxHex = (
-    await axios.get(
-      `https://blockstream.info/testnet/api/tx/${htlcUtxo.txid}/hex`
-    )
-  ).data;
+  const rawTxHex = (await axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`))
+    .data;
 
   spendPsbt.addInput({
     hash: htlcUtxo.txid,
@@ -487,11 +475,8 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   const htlcScriptBuffer = Buffer.from(loaded.htlcScriptHex, "hex");
   const htlcUtxo = htlcUtxos[0];
 
-  const rawTxHex = (
-    await axios.get(
-      `https://blockstream.info/testnet/api/tx/${htlcUtxo.txid}/hex`
-    )
-  ).data;
+  const rawTxHex = (await axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`))
+    .data;
 
   const spendPsbt = new bitcoin.Psbt({ network });
 
