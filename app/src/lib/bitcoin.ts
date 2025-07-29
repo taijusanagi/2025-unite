@@ -359,31 +359,30 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
 
 async function processWhenMakerAssetIsBTC(): Promise<void> {
   // ========================================
-  // 1️⃣ PHASE 1: Maker creates HTLC order (with partial PSBT)
+  // 1️⃣ PHASE 1: Maker creates HTLC and fully signs TX
   // ========================================
-  console.log("🔐 Phase 1: Maker creating HTLC script and order...");
+  console.log("🔐 Phase 1: Maker creating HTLC and signed funding TX...");
 
-  // Secret and hash (maker holds the secret, resolver will learn it later)
   const secret = Buffer.from(
     "c06c1486fc3ebbf5b4ce0b12a6ca10f38f7a738c3de082946112b1fb68d7fe96",
     "hex"
   );
   const hash = bitcoin.crypto.sha256(secret);
 
-  const lockTime = 2640000; // Timeout block height
+  const lockTime = 2640000;
 
   const htlcScript = bitcoin.script.compile([
     bitcoin.opcodes.OP_IF,
     bitcoin.opcodes.OP_SHA256,
     hash,
     bitcoin.opcodes.OP_EQUALVERIFY,
-    pubKeyB, // Resolver can redeem with secret
+    pubKeyB,
     bitcoin.opcodes.OP_CHECKSIG,
     bitcoin.opcodes.OP_ELSE,
     bitcoin.script.number.encode(lockTime),
     bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
     bitcoin.opcodes.OP_DROP,
-    pubKeyA, // Maker can refund after timeout
+    pubKeyA,
     bitcoin.opcodes.OP_CHECKSIG,
     bitcoin.opcodes.OP_ENDIF,
   ]);
@@ -395,21 +394,18 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
 
   console.log("✅ HTLC P2SH Address:", p2sh.address);
 
-  // ========================================
-  // 🧩 Multisig funding setup (maker + resolver must co-sign)
-  // ========================================
-  const pubkeys = [pubKeyA, pubKeyB].sort((a, b) => a.compare(b));
-  const multisigPayment = bitcoin.payments.p2wsh({
-    redeem: bitcoin.payments.p2ms({ m: 2, pubkeys, network }),
+  // 👤 Maker's P2WPKH funding
+  const makerPayment = bitcoin.payments.p2wpkh({
+    pubkey: pubKeyA,
     network,
   });
 
-  const fromAddress = multisigPayment.address!;
-  console.log("🔗 Multisig Funding Address:", fromAddress);
+  const fromAddress = makerPayment.address!;
+  console.log("🔗 Maker Funding Address:", fromAddress);
 
   const utxos = await getUtxos(fromAddress);
   if (!utxos.length) {
-    console.error("❌ No UTXOs found in multisig wallet.");
+    console.error("❌ No UTXOs found in maker's wallet.");
     return;
   }
 
@@ -418,7 +414,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   const amountToSend = totalInput - fee;
 
   if (amountToSend <= 0) {
-    console.error("❌ Not enough funds in multisig wallet.");
+    console.error("❌ Not enough funds to cover fee.");
     return;
   }
 
@@ -429,11 +425,9 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
       hash: utxo.txid,
       index: utxo.vout,
       witnessUtxo: {
-        script: multisigPayment.output!,
+        script: makerPayment.output!,
         value: utxo.value,
       },
-      redeemScript: multisigPayment.redeem!.output,
-      witnessScript: multisigPayment.redeem!.output,
     });
   }
 
@@ -442,7 +436,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     value: amountToSend,
   });
 
-  // Maker signs PSBT (partial)
+  // ✍️ Maker fully signs and finalizes
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
       publicKey: pubKeyA,
@@ -450,13 +444,14 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     });
   });
 
-  // ========================================
-  // 💾 Save order (PSBT) as JSON to simulate order submission
-  // ========================================
-  console.log("\n📦 Maker saving unsigned order as JSON...");
+  psbt.validateSignaturesOfAllInputs(ecc.verify);
+  psbt.finalizeAllInputs();
 
+  const txHex = psbt.extractTransaction().toHex();
+
+  // 💾 Save fully signed TX and order details
   const order = {
-    psbtBase64: psbt.toBase64(),
+    txHex,
     htlcScriptHex: htlcScript.toString("hex"),
     p2shAddress: p2sh.address!,
     valueSats: amountToSend,
@@ -466,41 +461,31 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   };
 
   const orderJson = JSON.stringify(order, null, 2);
-  console.log("📝 Saved Order JSON:\n", orderJson);
+  console.log("📦 Maker created and signed order JSON:\n", orderJson);
 
   // ========================================
-  // 2️⃣ PHASE 2: Taker receives order, signs and broadcasts
+  // 2️⃣ PHASE 2: Taker receives order, broadcasts
   // ========================================
-  console.log("\n📥 Phase 2: Resolver loads order, signs and broadcasts...");
+  console.log("\n📥 Phase 2: Resolver receives signed TX and broadcasts...");
 
   const loaded = JSON.parse(orderJson);
-  const loadedPsbt = bitcoin.Psbt.fromBase64(loaded.psbtBase64, { network });
 
-  loadedPsbt.signInput(0, {
-    publicKey: pubKeyB,
-    sign: (hash) => Buffer.from(keyPairB.sign(hash)),
-  });
-
-  loadedPsbt.validateSignaturesOfInput(0, ecc.verify);
-  loadedPsbt.finalizeAllInputs();
-
-  const txHex = loadedPsbt.extractTransaction().toHex();
-  const txid = await broadcastTx(txHex);
+  const txid = await broadcastTx(loaded.txHex);
   console.log("✅ HTLC Funding TX Broadcasted:", txid);
 
   // ========================================
-  // 3️⃣ PHASE 3: Taker redeems HTLC with secret
+  // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
   // ========================================
-  console.log("\n🔓 Phase 3: Resolver redeems HTLC using secret...");
+  console.log("\n🔓 Phase 3: Resolver redeems HTLC with secret...");
 
-  const htlcUtxos = await getUtxos(p2sh.address!);
+  const htlcUtxos = await getUtxos(loaded.p2shAddress);
   if (!htlcUtxos.length) {
-    console.error("❌ No HTLC UTXOs available.");
+    console.error("❌ No UTXOs found at HTLC address.");
     return;
   }
 
+  const htlcScriptBuffer = Buffer.from(loaded.htlcScriptHex, "hex");
   const htlcUtxo = htlcUtxos[0];
-  const spendPsbt = new bitcoin.Psbt({ network });
 
   const rawTxHex = (
     await axios.get(
@@ -508,11 +493,13 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     )
   ).data;
 
+  const spendPsbt = new bitcoin.Psbt({ network });
+
   spendPsbt.addInput({
     hash: htlcUtxo.txid,
     index: htlcUtxo.vout,
     nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
-    redeemScript: htlcScript,
+    redeemScript: htlcScriptBuffer,
   });
 
   spendPsbt.addOutput({
@@ -533,7 +520,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     pubKeyB,
     secret,
     bitcoin.opcodes.OP_TRUE,
-    htlcScript,
+    htlcScriptBuffer,
   ]);
 
   spendPsbt.finalizeInput(0, () => ({
@@ -544,7 +531,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   const finalTxHex = spendPsbt.extractTransaction().toHex();
   const finalTxId = await broadcastTx(finalTxHex);
 
-  console.log("🎉 Resolver has claimed HTLC using secret!");
+  console.log("🎉 Resolver has claimed the HTLC!");
   console.log("✅ Final Redeem TXID:", finalTxId);
 }
 

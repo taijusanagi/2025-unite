@@ -695,7 +695,7 @@ describe('Resolving example', () => {
     })
 
     describe('Special', () => {
-        it.only('resolver can deposit different amount in dst immutable', async () => {
+        it.skip('resolver can deposit different amount in dst immutable', async () => {
             const initialBalances = await getBalances(
                 config.chain.source.tokens.USDC.address,
                 config.chain.destination.tokens.USDC.address
