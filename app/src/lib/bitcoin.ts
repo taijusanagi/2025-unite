@@ -282,7 +282,6 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
     });
   });
 
-  psbt.validateSignaturesOfAllInputs(ecc.verify);
   psbt.finalizeAllInputs();
 
   const txHex = psbt.extractTransaction().toHex();
@@ -329,8 +328,6 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
     publicKey: pubKeyA,
     sign: (hash) => Buffer.from(keyPairA.sign(hash)),
   });
-
-  spendPsbt.validateSignaturesOfInput(0, ecc.verify);
 
   const sig = spendPsbt.data.inputs[0].partialSig![0].signature;
 
@@ -549,22 +546,7 @@ async function main() {
     `Balance (Resolver P2WPKH): ${format(resolverP2WPKHBalance)} tBTC`
   );
 
-  const fee = 100;
-  const amountToSend = resolverP2WPKHBalance - fee;
-
-  if (amountToSend <= 0) {
-    console.error("Resolver P2WPKH has insufficient balance to cover fee.");
-    return;
-  }
-
-  //   await sendBitcoin({
-  //     fromWIF: privKeyB,
-  //     toAddress: userLegacyAddress!,
-  //     amountSats: amountToSend,
-  //     fromType: "p2wpkh",
-  //   });
-
-  //   await sendBtcFromP2PKHtoBech32();
+  await processWhenTakerAssetIsBTC();
 }
 
 main().catch(console.error);
