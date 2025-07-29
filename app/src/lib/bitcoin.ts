@@ -516,25 +516,44 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     value: redeemValue,
   });
 
+  // Sign the input. This generates the signature and stores it in the PSBT.
   spendPsbt.signInput(0, {
-    publicKey: pubKeyB,
+    publicKey: Buffer.from(keyPairB.publicKey),
     sign: (hash) => Buffer.from(keyPairB.sign(hash)),
   });
 
-  const sig = spendPsbt.data.inputs[0].partialSig![0].signature;
-  const redeemInput = bitcoin.script.compile([
-    sig,
-    pubKeyB,
-    secret,
-    bitcoin.opcodes.OP_TRUE,
-    htlcScriptBuffer,
-  ]);
+  // This custom finalizer function assembles the correct scriptSig.
+  const htlcRedeemFinalizer = (inputIndex, input) => {
+    const signature = input.partialSig[0].signature;
 
-  spendPsbt.finalizeInput(0, () => ({
-    finalScriptSig: redeemInput,
-    finalScriptWitness: undefined,
-  }));
+    // This is the "unlocking" script. It provides the data needed
+    // to satisfy the OP_IF branch of your HTLC redeem script.
+    // It must contain, in order: signature, secret, and OP_TRUE.
+    const unlockingScript = bitcoin.script.compile([
+      signature,
+      secret, // The secret must be a Buffer
+      bitcoin.opcodes.OP_TRUE,
+    ]);
 
+    // Use the payments utility to create the final scriptSig, which correctly
+    // combines the unlocking data with the redeem script itself.
+    const payment = bitcoin.payments.p2sh({
+      redeem: {
+        input: unlockingScript,
+        output: input.redeemScript,
+      },
+    });
+
+    return {
+      finalScriptSig: payment.input,
+      finalScriptWitness: undefined,
+    };
+  };
+
+  // Finalize the input using our custom logic.
+  spendPsbt.finalizeInput(0, htlcRedeemFinalizer);
+
+  // Extract and broadcast the final, valid transaction.
   const finalTxHex = spendPsbt.extractTransaction().toHex();
   const finalTxId = await broadcastTx(finalTxHex);
 
