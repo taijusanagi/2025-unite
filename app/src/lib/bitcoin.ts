@@ -249,32 +249,46 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
   console.log("✅ HTLC P2SH Address:", p2sh.address);
 
   // === Taker (resolver) funds the HTLC ===
-  const utxos = await getUtxos(resolverLegacyAddress!);
+  const utxos = await getUtxos(resolverBech32Address!);
   if (!utxos.length) {
     console.error("❌ No UTXOs available to fund HTLC.");
     return;
   }
 
-  const fee = 1000;
+  const amount = 1000000; // Match maker's amount or adjust as needed
+  const fee = 10000;
   const totalInput = utxos.reduce((sum, u) => sum + u.value, 0);
-  const amountToSend = totalInput - fee;
+  const change = totalInput - amount - fee;
+
+  if (change < 0) {
+    console.error("❌ Not enough funds to lock BTC and cover the fee.");
+    return;
+  }
 
   const psbt = new bitcoin.Psbt({ network });
 
   for (const utxo of utxos) {
-    const rawTxHex = (await axios.get(`${API_BASE}/tx/${utxo.txid}/hex`)).data;
-
     psbt.addInput({
       hash: utxo.txid,
       index: utxo.vout,
-      nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+      witnessUtxo: {
+        script: bitcoin.payments.p2wpkh({ pubkey: pubKeyB, network }).output!,
+        value: utxo.value,
+      },
     });
   }
 
   psbt.addOutput({
     script: p2sh.output!,
-    value: amountToSend,
+    value: amount,
   });
+
+  if (change > 0) {
+    psbt.addOutput({
+      address: resolverBech32Address!, // refund to self
+      value: change,
+    });
+  }
 
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
@@ -315,9 +329,17 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
     redeemScript: htlcScript,
   });
 
+  const redeemFee = 10000;
+  const redeemValue = htlcUtxo.value - redeemFee;
+
+  if (redeemValue <= 0) {
+    console.error(`❌ Not enough value to redeem HTLC.`);
+    return;
+  }
+
   spendPsbt.addOutput({
     address: userBech32Address!,
-    value: htlcUtxo.value - 1000,
+    value: redeemValue,
   });
 
   const secret = Buffer.from(
@@ -330,20 +352,29 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
     sign: (hash) => Buffer.from(keyPairA.sign(hash)),
   });
 
-  const sig = spendPsbt.data.inputs[0].partialSig![0].signature;
+  const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
+    const signature = input.partialSig[0].signature;
 
-  const redeemInput = bitcoin.script.compile([
-    sig,
-    pubKeyA,
-    secret,
-    bitcoin.opcodes.OP_TRUE, // chooses IF branch (hash + pubKeyA)
-    htlcScript,
-  ]);
+    const unlockingScript = bitcoin.script.compile([
+      signature,
+      secret,
+      bitcoin.opcodes.OP_TRUE,
+    ]);
 
-  spendPsbt.finalizeInput(0, () => ({
-    finalScriptSig: redeemInput,
-    finalScriptWitness: undefined,
-  }));
+    const payment = bitcoin.payments.p2sh({
+      redeem: {
+        input: unlockingScript,
+        output: htlcScript,
+      },
+    });
+
+    return {
+      finalScriptSig: payment.input,
+      finalScriptWitness: undefined,
+    };
+  };
+
+  spendPsbt.finalizeInput(0, htlcRedeemFinalizer);
 
   const finalTxHex = spendPsbt.extractTransaction().toHex();
   const finalTxId = await broadcastTx(finalTxHex);
@@ -401,8 +432,8 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     return;
   }
 
-  const amount = 10000;
-  const fee = 1000;
+  const amount = 1000000;
+  const fee = 10000;
   const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
   const change = totalInput - amount - fee;
 
@@ -501,7 +532,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     redeemScript: htlcScriptBuffer,
   });
 
-  const redeemFee = 1000;
+  const redeemFee = 10000;
   const redeemValue = htlcUtxo.value - redeemFee;
 
   if (redeemValue <= 0) {
@@ -523,7 +554,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   });
 
   // This custom finalizer function assembles the correct scriptSig.
-  const htlcRedeemFinalizer = (inputIndex, input) => {
+  const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
     const signature = input.partialSig[0].signature;
 
     // This is the "unlocking" script. It provides the data needed
@@ -581,6 +612,7 @@ async function main() {
     `Balance (Resolver P2WPKH): ${format(resolverP2WPKHBalance)} tBTC`
   );
 
+  await processWhenTakerAssetIsBTC();
   await processWhenMakerAssetIsBTC();
 }
 
