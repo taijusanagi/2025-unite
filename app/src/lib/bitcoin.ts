@@ -25,6 +25,15 @@ const privKeyB =
 const keyPairA: ECPairInterface = ECPair.fromWIF(privKeyA, network);
 const keyPairB: ECPairInterface = ECPair.fromWIF(privKeyB, network);
 
+// const keyPairA: ECPairInterface = ECPair.fromPrivateKey(
+//   Buffer.from(privKeyA, "hex"),
+//   { network }
+// );
+// const keyPairB: ECPairInterface = ECPair.fromPrivateKey(
+//   Buffer.from(privKeyB, "hex"),
+//   { network }
+// );
+
 const pubKeyA = Buffer.from(keyPairA.publicKey);
 const pubKeyB = Buffer.from(keyPairB.publicKey);
 

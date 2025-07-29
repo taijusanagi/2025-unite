@@ -50,3 +50,32 @@ https://testnet.monadexplorer.com/address/0xf927004F33f26CaA1763BB21454Ef36AA76e
 - limit-order-sdk/dist/cjs/constant.js
 - cross-chain-sdk/dist/cjs/chain.js
 - cross-chain-sdk/dist/cjs/deployment.js
+
+## Memo
+
+```
+docker run -p 50001:50001 -p 8094:80 \
+ --rm -i -t blockstream/esplora \
+ bash -c "/srv/explorer/run.sh bitcoin-regtest explorer"
+```
+
+```
+/srv/explorer/bitcoin/bin/bitcoin-cli -regtest -rpccookiefile=/data/bitcoin/regtest/.cookie sendtoaddress mpYCVqWHpoNAEPDTQzE8d2JKsZMdaUZn1P 0.1
+```
+
+```
+alias bcli='/srv/explorer/bitcoin/bin/bitcoin-cli -regtest -rpccookiefile=/data/bitcoin/regtest/.cookie'
+```
+
+```
+bcli createwallet "mywallet"
+```
+
+```
+MINING_ADDRESS=$(bcli -rpcwallet=mywallet getnewaddress)
+bcli -rpcwallet=mywallet generatetoaddress 101 $MINING_ADDRESS
+```
+
+```
+bcli -rpcwallet=mywallet sendtoaddress mpYCVqWHpoNAEPDTQzE8d2JKsZMdaUZn1P 0.1
+```
