@@ -164,6 +164,41 @@ async function sendBitcoin({
   console.log("Broadcasted TXID:", txid);
 }
 
+async function verifyHTLCScriptHashFromTx(
+  txid: string,
+  htlcScript: Buffer
+): Promise<void> {
+  const scriptHash = bitcoin.crypto.hash160(htlcScript); // HASH160(redeemScript)
+
+  // Fetch raw tx and decode
+  const txHex = await axios
+    .get(`${API_BASE}/tx/${txid}/hex`)
+    .then((res) => res.data);
+  const tx = bitcoin.Transaction.fromHex(txHex);
+
+  // Get expected scriptPubKey from known redeem script
+  const expectedOutputScript = bitcoin.script.compile([
+    bitcoin.opcodes.OP_HASH160,
+    scriptHash,
+    bitcoin.opcodes.OP_EQUAL,
+  ]);
+
+  // Check if any output matches
+  const match = tx.outs.find((out) => out.script.equals(expectedOutputScript));
+
+  if (match) {
+    console.log("✅ HTLC script hash verified on-chain!");
+  } else {
+    console.error("❌ HTLC script hash mismatch. Script may not be correct.");
+  }
+
+  // Optional: debug print
+  console.log("Expected scriptPubKey:", expectedOutputScript.toString("hex"));
+  tx.outs.forEach((out, i) => {
+    console.log(`Output ${i} scriptPubKey: ${out.script.toString("hex")}`);
+  });
+}
+
 async function processWhenTakerAssetIsBTC(): Promise<void> {
   // ========================================
   // 1️⃣ PHASE 1: Taker (resolver) creates HTLC and deposits BTC
@@ -180,7 +215,12 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
 
   const lockTime = 2640000; // Timeout block (taker can refund after this)
 
+  const textBuffer = Buffer.from("hello world", "utf8");
+
   const htlcScript = bitcoin.script.compile([
+    textBuffer,
+    bitcoin.opcodes.OP_DROP,
+
     bitcoin.opcodes.OP_IF,
     bitcoin.opcodes.OP_SHA256,
     secretHash,
@@ -259,6 +299,8 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
 
   console.log("✅ Taker has funded HTLC:");
   console.log("🔗 TXID:", txid);
+
+  await verifyHTLCScriptHashFromTx(txid, htlcScript);
 
   // ========================================
   // 2️⃣ PHASE 2: Maker claims BTC using secret
@@ -460,6 +502,8 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
 
   const txid = await broadcastTx(loaded.txHex);
   console.log("✅ HTLC Funding TX Broadcasted:", txid);
+
+  await verifyHTLCScriptHashFromTx(txid, htlcScript);
 
   // ========================================
   // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
