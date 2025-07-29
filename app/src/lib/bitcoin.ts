@@ -2,6 +2,7 @@ import * as bitcoin from "bitcoinjs-lib";
 import axios from "axios";
 import * as ecc from "tiny-secp256k1";
 import { ECPairFactory, ECPairInterface } from "ecpair";
+import crypto from "crypto";
 
 type AddressType = "p2pkh" | "p2wpkh";
 
@@ -357,10 +358,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   // ========================================
   console.log("🔐 Phase 1: Maker creating HTLC and signed funding TX...");
 
-  const secret = Buffer.from(
-    "c06c1486fc3ebbf5b4ce0b12a6ca10f38f7a738c3de082946112b1fb68d7fe96",
-    "hex"
-  );
+  const secret = crypto.randomBytes(32);
   const hash = bitcoin.crypto.sha256(secret);
 
   const lockTime = 2640000;
@@ -403,16 +401,24 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     return;
   }
 
+  const amount = 10000;
   const fee = 1000;
   const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
-  const amountToSend = totalInput - fee;
+  const change = totalInput - amount - fee;
 
-  if (amountToSend <= 0) {
-    console.error("❌ Not enough funds to cover fee.");
+  if (change < 0) {
+    console.error("❌ Not enough funds to lock 10 sats and cover the fee.");
     return;
   }
 
   const psbt = new bitcoin.Psbt({ network });
+
+  if (change > 0) {
+    psbt.addOutput({
+      address: fromAddress,
+      value: change,
+    });
+  }
 
   for (const utxo of utxos) {
     psbt.addInput({
@@ -427,10 +433,9 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
 
   psbt.addOutput({
     script: p2sh.output!,
-    value: amountToSend,
+    value: amount,
   });
 
-  // ✍️ Maker fully signs and finalizes
   utxos.forEach((_, idx) => {
     psbt.signInput(idx, {
       publicKey: pubKeyA,
@@ -438,7 +443,6 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     });
   });
 
-  psbt.validateSignaturesOfAllInputs(ecc.verify);
   psbt.finalizeAllInputs();
 
   const txHex = psbt.extractTransaction().toHex();
@@ -448,7 +452,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     txHex,
     htlcScriptHex: htlcScript.toString("hex"),
     p2shAddress: p2sh.address!,
-    valueSats: amountToSend,
+    valueSats: amount,
     lockTime,
     hash: hash.toString("hex"),
     createdAt: new Date().toISOString(),
@@ -463,6 +467,10 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   console.log("\n📥 Phase 2: Resolver receives signed TX and broadcasts...");
 
   const loaded = JSON.parse(orderJson);
+
+  console.log("HTLC address:", loaded.p2shAddress);
+  const htlcUtxos2 = await getUtxos(loaded.p2shAddress);
+  console.log("Found HTLC UTXOs:", htlcUtxos2);
 
   const txid = await broadcastTx(loaded.txHex);
   console.log("✅ HTLC Funding TX Broadcasted:", txid);
@@ -493,17 +501,25 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     redeemScript: htlcScriptBuffer,
   });
 
+  const redeemFee = 1000;
+  const redeemValue = htlcUtxo.value - redeemFee;
+
+  if (redeemValue <= 0) {
+    console.error(
+      `❌ Not enough value to redeem HTLC. UTXO value = ${htlcUtxo.value}, fee = ${redeemFee}`
+    );
+    return;
+  }
+
   spendPsbt.addOutput({
     address: resolverBech32Address!,
-    value: htlcUtxo.value - 1000,
+    value: redeemValue,
   });
 
   spendPsbt.signInput(0, {
     publicKey: pubKeyB,
     sign: (hash) => Buffer.from(keyPairB.sign(hash)),
   });
-
-  spendPsbt.validateSignaturesOfInput(0, ecc.verify);
 
   const sig = spendPsbt.data.inputs[0].partialSig![0].signature;
   const redeemInput = bitcoin.script.compile([
@@ -546,7 +562,7 @@ async function main() {
     `Balance (Resolver P2WPKH): ${format(resolverP2WPKHBalance)} tBTC`
   );
 
-  await processWhenTakerAssetIsBTC();
+  await processWhenMakerAssetIsBTC();
 }
 
 main().catch(console.error);
