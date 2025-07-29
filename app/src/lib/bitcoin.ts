@@ -14,10 +14,9 @@ const network =
 
 const API_BASE =
   NETWORK === "regtest"
-    ? "http://localhost:8094/regtest/api" // or whatever your Electrs or API port is
+    ? "http://localhost:8094/regtest/api"
     : "https://blockstream.info/testnet/api";
 
-// Use WIF from environment if provided, else generate new
 const privKeyA =
   process.env.BTC_PRIVATE_KEY_1 || ECPair.makeRandom({ network }).toWIF();
 const privKeyB =
@@ -26,39 +25,30 @@ const privKeyB =
 const keyPairA: ECPairInterface = ECPair.fromWIF(privKeyA, network);
 const keyPairB: ECPairInterface = ECPair.fromWIF(privKeyB, network);
 
-// const keyPairA: ECPairInterface = ECPair.fromPrivateKey(
-//   Buffer.from(privKeyA, "hex"),
-//   { network }
-// );
-// const keyPairB: ECPairInterface = ECPair.fromPrivateKey(
-//   Buffer.from(privKeyB, "hex"),
-//   { network }
-// );
-
 const pubKeyA = Buffer.from(keyPairA.publicKey);
 const pubKeyB = Buffer.from(keyPairB.publicKey);
 
-const userLegacyAddress = bitcoin.payments.p2pkh({
-  pubkey: pubKeyA,
-  network,
-}).address;
+// const userLegacyAddress = bitcoin.payments.p2pkh({
+//   pubkey: pubKeyA,
+//   network,
+// }).address;
 const userBech32Address = bitcoin.payments.p2wpkh({
   pubkey: pubKeyA,
   network,
 }).address;
-const resolverLegacyAddress = bitcoin.payments.p2pkh({
-  pubkey: pubKeyB,
-  network,
-}).address;
+// const resolverLegacyAddress = bitcoin.payments.p2pkh({
+//   pubkey: pubKeyB,
+//   network,
+// }).address;
 const resolverBech32Address = bitcoin.payments.p2wpkh({
   pubkey: pubKeyB,
   network,
 }).address;
 
-console.log("User Address (P2PKH):", userLegacyAddress);
+// console.log("User Address (P2PKH):", userLegacyAddress);
 console.log("User Address (Bech32):", userBech32Address);
 console.log("User Private Key (WIF):", privKeyA);
-console.log("Resolver Address (P2PKH):", resolverLegacyAddress);
+// console.log("Resolver Address (P2PKH):", resolverLegacyAddress);
 console.log("Resolver Address (Bech32):", resolverBech32Address);
 console.log("Resolver Private Key (WIF):", privKeyB);
 
@@ -89,41 +79,6 @@ async function broadcastTx(txHex: string): Promise<string> {
   return res.data;
 }
 
-async function waitForConfirmation(
-  txid: string,
-  maxTries = 30,
-  intervalMs = 10000
-): Promise<void> {
-  console.log(`⏳ Waiting for confirmation of TX: ${txid}...`);
-  let tries = 0;
-
-  while (tries < maxTries) {
-    try {
-      const res = await axios.get(`${API_BASE}/tx/${txid}/status`);
-      const status = res.data;
-
-      if (status.confirmed) {
-        console.log(
-          `✅ Transaction ${txid} confirmed in block ${status.block_height}`
-        );
-        return;
-      } else {
-        console.log(`🔄 Not confirmed yet (try ${tries + 1}/${maxTries})`);
-      }
-    } catch (e) {
-      const err = e as Error;
-      console.error("Error checking tx status:", err.message);
-    }
-
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
-    tries++;
-  }
-
-  throw new Error(
-    `❌ Transaction ${txid} not confirmed after ${maxTries} attempts.`
-  );
-}
-
 async function sendBitcoin({
   fromWIF,
   toAddress,
@@ -151,7 +106,7 @@ async function sendBitcoin({
     return;
   }
 
-  const fee = 1000;
+  const fee = 10000;
   const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
 
   if (totalInput < amountSats + fee) {
@@ -600,14 +555,14 @@ async function main() {
 
   const format = (sats: number) => (sats / 1e8).toFixed(8);
 
-  const userP2PKHBalance = await getBalance(userLegacyAddress!);
+  // const userP2PKHBalance = await getBalance(userLegacyAddress!);
   const userP2WPKHBalance = await getBalance(userBech32Address!);
-  const resolverP2PKHBalance = await getBalance(resolverLegacyAddress!);
+  // const resolverP2PKHBalance = await getBalance(resolverLegacyAddress!);
   const resolverP2WPKHBalance = await getBalance(resolverBech32Address!);
-
-  console.log(`Balance (User P2PKH): ${format(userP2PKHBalance)} tBTC`);
+  //
+  // console.log(`Balance (User P2PKH): ${format(userP2PKHBalance)} tBTC`);
   console.log(`Balance (User P2WPKH): ${format(userP2WPKHBalance)} tBTC`);
-  console.log(`Balance (Resolver P2PKH): ${format(resolverP2PKHBalance)} tBTC`);
+  // console.log(`Balance (Resolver P2PKH): ${format(resolverP2PKHBalance)} tBTC`);
   console.log(
     `Balance (Resolver P2WPKH): ${format(resolverP2WPKHBalance)} tBTC`
   );
