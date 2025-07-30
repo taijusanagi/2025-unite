@@ -1,8 +1,8 @@
 [profile.default]
 solc = "0.8.23"
-src = 'contracts/src'
-out = 'dist/contracts'
-libs = ['contracts/lib']
+src = 'contracts/evm/src'
+out = 'dist/evm/contracts'
+libs = ['contracts/evm/lib']
 
 via_ir = true
 optimizer_runs = 1000000
