@@ -1,4 +1,4 @@
-import {AbiCoder, Contract, JsonRpcProvider, Signer, TransactionRequest, Wallet as PKWallet, Interface} from 'ethers'
+import {AbiCoder, Contract, JsonRpcProvider, Signer, TransactionRequest, Wallet as PKWallet} from 'ethers'
 import Sdk from '@1inch/cross-chain-sdk'
 import ERC20 from '../../../dist/contracts/evm/IERC20.sol/IERC20.json'
 import WETH from '../../../dist/contracts/evm/IWETH.sol/IWETH.json'

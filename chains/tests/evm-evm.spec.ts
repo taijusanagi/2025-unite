@@ -121,7 +121,7 @@ describe('evm-evm', () => {
     })
 
     // eslint-disable-next-line max-lines-per-function
-    describe('evm-evm', () => {
+    describe('integrate', () => {
         it('should work', async () => {
             const initialBalances = await getBalances(src.weth, dst.weth)
             // // User creates order
