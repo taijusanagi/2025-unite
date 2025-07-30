@@ -7,27 +7,32 @@ import "forge-std/Script.sol";
 import {LimitOrderProtocol} from "@1inch/limit-order-protocol-contract/contracts/LimitOrderProtocol.sol";
 import {EscrowFactory} from "cross-chain-swap/EscrowFactory.sol";
 import {ERC20True} from "cross-chain-swap/mocks/ERC20True.sol";
+import {IWETH} from "@1inch/solidity-utils/contracts/interfaces/IWETH.sol";
+import {IERC20} from "openzeppelin-contracts/contracts/interfaces/IERC20.sol";
 
+import {WETH9} from "../../contracts/evm/lib/others/WETH9.sol";
 import {Resolver} from "../../contracts/evm/src/Resolver.sol";
+
 
 contract Deploy is Script {
     function run() external {
-        uint256 deployerKey = vm.envUint("PRIVATE_KEY");
-        address owner = vm.envAddress("OWNER_ADDRESS");
+        uint256 deployerKey = vm.envUint("ETH_PRIVATE_KEY");
+        address owner = vm.addr(deployerKey);
 
-        // Pick WETH by network name
-        string memory name = vm.envString("FOUNDRY_NETWORK");
-        address weth;
+        uint256 chainId = block.chainid;
+        IWETH weth;
 
-        if (keccak256(bytes(name)) == keccak256("base-sepolia")) {
-            weth = 0x1bdd24840e119dc2602dcc587dd182812427a5cc;
-        } else if (keccak256(bytes(name)) == keccak256("arbitrum-sepolia")) {
-            weth = 0x2836ae2ea2c013acd38028fd0c77b92cccfa2ee4;
-        } else if (keccak256(bytes(name)) == keccak256("monad-testnet")) {
-            weth = 0x760afe86e5de5fa0ee542fc7b7b713e1c5425701;
+        if (chainId == 84532) {
+            weth = IWETH(0x1BDD24840e119DC2602dCC587Dd182812427A5Cc);
+        } else if (chainId == 421614) {
+            weth = IWETH(0x2836ae2eA2c013acD38028fD0C77B92cccFa2EE4);
+        } else if (chainId == 10143) {
+            weth = IWETH(0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701);
         } else {
-            // fallback to mainnet/hardhat default
-            weth = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+            // Deploy local WETH9 if on unknown chain (e.g., anvil)
+            WETH9 weth9 = new WETH9();
+            weth = IWETH(address(weth9));
+            console.log("Local WETH9 deployed at:", address(weth9));
         }
 
         vm.startBroadcast(deployerKey);
@@ -40,7 +45,7 @@ contract Deploy is Script {
         EscrowFactory factory = new EscrowFactory(
             address(lop),
             weth,
-            address(0), // zero address
+            IERC20(address(0)), // zero address
             owner,
             1800,
             1800
@@ -49,8 +54,8 @@ contract Deploy is Script {
 
         // 3. Deploy Resolver
         Resolver resolver = new Resolver(
-            address(factory),
-            address(lop),
+            factory,
+            lop,
             owner
         );
         console.log("Resolver deployed at:", address(resolver));
