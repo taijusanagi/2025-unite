@@ -1,12 +1,12 @@
-import {AbiCoder, Contract, JsonRpcProvider, Signer, TransactionRequest, Wallet as PKWallet} from 'ethers'
+import {AbiCoder, Contract, JsonRpcProvider, Signer, TransactionRequest, Wallet as PKWallet, Interface} from 'ethers'
 import Sdk from '@1inch/cross-chain-sdk'
 import ERC20 from '../../../dist/contracts/evm/IERC20.sol/IERC20.json'
+import WETH from '../../../dist/contracts/evm/IWETH.sol/IWETH.json'
 
 const coder = AbiCoder.defaultAbiCoder()
 
 export class Wallet {
     public provider: JsonRpcProvider
-
     public signer: Signer
 
     constructor(privateKeyOrSigner: string | Signer, provider: JsonRpcProvider) {
@@ -64,6 +64,12 @@ export class Wallet {
         })
     }
 
+    public async deposit(token: string, amount: bigint): Promise<void> {
+        const contract = new Contract(token.toString(), WETH.abi, this.signer)
+
+        return contract.deposit({value: amount})
+    }
+
     public async transferToken(token: string, dest: string, amount: bigint): Promise<void> {
         const tx = await this.signer.sendTransaction({
             to: token.toString(),
@@ -82,8 +88,13 @@ export class Wallet {
         await tx.wait()
     }
 
-    public async signOrder(srcChainId: number, order: Sdk.CrossChainOrder): Promise<string> {
+    public async signOrder(srcChainId: number, order: Sdk.CrossChainOrder, verifyingContract: string): Promise<string> {
         const typedData = order.getTypedData(srcChainId)
+
+        console.log(typedData)
+        typedData.domain.name = '1inch Limit Order Protocol'
+        typedData.domain.version = '4'
+        typedData.domain.verifyingContract = verifyingContract
 
         return this.signer.signTypedData(
             typedData.domain,

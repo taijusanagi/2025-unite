@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import {expect, jest} from '@jest/globals'
+import {jest} from '@jest/globals'
 
 import Sdk from '@1inch/cross-chain-sdk'
 import {
@@ -16,12 +16,14 @@ import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Wallet} from './lib/evm/wallet'
 import {Resolver} from './lib/evm/resolver'
 import {EscrowFactory} from './lib/evm/escrow-factory'
+import trueERC20Contract from '../dist/contracts/evm/ERC20True.sol/ERC20True.json'
 import wethContract from '../dist/contracts/evm/WETH9.sol/WETH9.json'
 import lopContract from '../dist/contracts/evm/LimitOrderProtocol.sol/LimitOrderProtocol.json'
 import factoryContract from '../dist/contracts/evm/EscrowFactory.sol/EscrowFactory.json'
 import resolverContract from '../dist/contracts/evm/Resolver.sol/Resolver.json'
 import {deploy, getProvider} from './lib/evm/utils'
 import {CreateServerReturnType} from 'prool'
+import {patchedGetOrderHash} from './lib/evm/patch'
 
 const {Address} = Sdk
 
@@ -41,7 +43,9 @@ describe('evm-evm', () => {
     type Chain = {
         node?: CreateServerReturnType | undefined
         provider: JsonRpcProvider
+        trueERC20: string
         weth: string
+        lop: string
         escrowFactory: string
         resolver: string
     }
@@ -49,6 +53,7 @@ describe('evm-evm', () => {
     let src: Chain
     let dst: Chain
 
+    let dstOwner: Wallet
     let srcChainUser: Wallet
     let dstChainUser: Wallet
     let srcChainResolver: Wallet
@@ -66,8 +71,11 @@ describe('evm-evm', () => {
     }
 
     beforeAll(async () => {
+        // t: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+        // l: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
         ;[src, dst] = await Promise.all([initChain(srcChainId), initChain(dstChainId)])
 
+        dstOwner = new Wallet(ownerPk, dst.provider)
         srcChainUser = new Wallet(userPk, src.provider)
         dstChainUser = new Wallet(userPk, dst.provider)
         srcChainResolver = new Wallet(resolverPk, src.provider)
@@ -76,8 +84,17 @@ describe('evm-evm', () => {
         srcFactory = new EscrowFactory(src.provider, src.escrowFactory)
         dstFactory = new EscrowFactory(dst.provider, dst.escrowFactory)
 
+        await srcChainUser.deposit(src.weth, parseUnits('0.001', 18))
+        await srcChainUser.approveToken(src.weth, src.lop, MaxUint256)
+
         srcResolverContract = await Wallet.fromAddress(src.resolver, src.provider)
         dstResolverContract = await Wallet.fromAddress(dst.resolver, dst.provider)
+
+        await dstOwner.send({to: dstResolverContract, value: parseUnits('0.01', 18)})
+        await dstResolverContract.deposit(src.weth, parseUnits('0.001', 18))
+
+        await dstChainResolver.transfer(dst.resolver, parseEther('0.001'))
+        await dstResolverContract.unlimitedApprove(dst.weth, dst.escrowFactory)
 
         srcTimestamp = BigInt((await src.provider.getBlock('latest'))!.timestamp)
     })
@@ -105,8 +122,8 @@ describe('evm-evm', () => {
     })
 
     // eslint-disable-next-line max-lines-per-function
-    describe('Fill', () => {
-        it('should swap Ethereum USDC -> Bsc USDC. Single fill only', async () => {
+    describe('evm-evm', () => {
+        it('should work', async () => {
             const initialBalances = await getBalances(src.weth, dst.weth)
             // // User creates order
             const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
@@ -116,7 +133,7 @@ describe('evm-evm', () => {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address(await srcChainUser.getAddress()),
                     makingAmount: 10000n,
-                    takingAmount: 10000n,
+                    takingAmount: 9999n,
                     makerAsset: new Address(src.weth),
                     takerAsset: new Address(dst.weth)
                 },
@@ -133,8 +150,8 @@ describe('evm-evm', () => {
                     }),
                     srcChainId,
                     dstChainId,
-                    srcSafetyDeposit: parseEther('0.001'),
-                    dstSafetyDeposit: parseEther('0.001')
+                    srcSafetyDeposit: 1n,
+                    dstSafetyDeposit: 1n
                 },
                 {
                     auction: new Sdk.AuctionDetails({
@@ -157,26 +174,46 @@ describe('evm-evm', () => {
                     allowMultipleFills: false
                 }
             )
+
+            // patch
             console.log('order', order)
-            // const signature = await srcChainUser.signOrder(srcChainId, order)
-            // const orderHash = order.getOrderHash(srcChainId)
+            // order.inner.inner.takerAsset = new Address(src.trueERC20)
+            // console.log()
+
+            // order.takerAsset = new Address(src.trueERC20)
+            const signature = await srcChainUser.signOrder(srcChainId, order, src.lop)
+            const patchedHash = patchedGetOrderHash(srcChainId, order, src.lop)
+            console.log('patchedHash', patchedHash)
+            const orderHash = order.getOrderHash(srcChainId)
+
             // // Resolver fills order
-            // const resolverContract = new Resolver(src.resolver, dst.resolver)
-            // console.log(`[${srcChainId}]`, `Filling order ${orderHash}`)
-            // const fillAmount = order.makingAmount
-            // const {txHash: orderFillHash, blockHash: srcDeployBlock} = await srcChainResolver.send(
-            //     resolverContract.deploySrc(
-            //         srcChainId,
-            //         order,
-            //         signature,
-            //         Sdk.TakerTraits.default()
-            //             .setExtension(order.extension)
-            //             .setAmountMode(Sdk.AmountMode.maker)
-            //             .setAmountThreshold(order.takingAmount),
-            //         fillAmount
-            //     )
-            // )
-            // console.log(`[${srcChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+            const resolverContract = new Resolver(src.resolver, dst.resolver)
+            console.log(`[${srcChainId}]`, `Filling order ${orderHash}`)
+            const fillAmount = order.makingAmount
+
+            console.log(
+                'extension',
+                Sdk.TakerTraits.default()
+                    .setExtension(order.extension)
+                    .setAmountMode(Sdk.AmountMode.maker)
+                    .setAmountThreshold(order.takingAmount)
+            )
+
+            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await srcChainResolver.send(
+                resolverContract.deploySrc(
+                    srcChainId,
+                    order,
+                    signature,
+                    Sdk.TakerTraits.default()
+                        .setExtension(order.extension)
+                        .setAmountMode(Sdk.AmountMode.maker)
+                        .setAmountThreshold(order.takingAmount),
+                    fillAmount,
+                    order.escrowExtension.hashLockInfo,
+                    src.lop
+                )
+            )
+            console.log(`[${srcChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
             // const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock)
             // const dstImmutables = srcEscrowEvent[0]
             //     .withComplement(srcEscrowEvent[1])
@@ -230,19 +267,26 @@ describe('evm-evm', () => {
 async function initChain(chainId: number): Promise<{
     node?: CreateServerReturnType
     provider: JsonRpcProvider
-    lop: string
+    trueERC20: string
     weth: string
+    lop: string
     escrowFactory: string
     resolver: string
 }> {
     const {node, provider} = await getProvider(chainId)
     const deployer = new SignerWallet(ownerPk, provider)
 
+    // deploy TrueERC20
+    const trueERC20 = await deploy(trueERC20Contract, [], deployer)
+    console.log(`[${chainId}]`, `TrueERC20 contract deployed to`, trueERC20)
+
     // deploy WETH
     const weth = await deploy(wethContract, [], deployer)
+    console.log(`[${chainId}]`, `WETH contract deployed to`, weth)
 
     // deploy LOP
     const lop = await deploy(lopContract, [weth], deployer)
+    console.log(`[${chainId}]`, `LOP contract deployed to`, lop)
 
     // deploy EscrowFactory
     const escrowFactory = await deploy(
@@ -271,5 +315,5 @@ async function initChain(chainId: number): Promise<{
     )
     console.log(`[${chainId}]`, `Resolver contract deployed to`, resolver)
 
-    return {node: node, provider, weth, lop, resolver, escrowFactory}
+    return {node: node, provider, trueERC20, weth, lop, resolver, escrowFactory}
 }
