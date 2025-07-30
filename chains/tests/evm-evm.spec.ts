@@ -34,8 +34,9 @@ const resolverPk = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cd
 
 // eslint-disable-next-line max-lines-per-function
 describe('evm-evm', () => {
+    // to pass create order, it should specify supported networks
     const srcChainId = 1
-    const dstChainId = 2
+    const dstChainId = 137
 
     type Chain = {
         node?: CreateServerReturnType | undefined
@@ -106,59 +107,57 @@ describe('evm-evm', () => {
     // eslint-disable-next-line max-lines-per-function
     describe('Fill', () => {
         it('should swap Ethereum USDC -> Bsc USDC. Single fill only', async () => {
-            // const initialBalances = await getBalances(
-            //     config.chain.source.tokens.USDC.address,
-            //     config.chain.destination.tokens.USDC.address
-            // )
+            const initialBalances = await getBalances(src.weth, dst.weth)
             // // User creates order
-            // const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
-            // const order = Sdk.CrossChainOrder.new(
-            //     new Address(src.escrowFactory),
-            //     {
-            //         salt: Sdk.randBigInt(1000n),
-            //         maker: new Address(await srcChainUser.getAddress()),
-            //         makingAmount: parseUnits('100', 6),
-            //         takingAmount: parseUnits('99', 6),
-            //         makerAsset: new Address(config.chain.source.tokens.USDC.address),
-            //         takerAsset: new Address(config.chain.destination.tokens.USDC.address)
-            //     },
-            //     {
-            //         hashLock: Sdk.HashLock.forSingleFill(secret),
-            //         timeLocks: Sdk.TimeLocks.new({
-            //             srcWithdrawal: 10n, // 10sec finality lock for test
-            //             srcPublicWithdrawal: 120n, // 2m for private withdrawal
-            //             srcCancellation: 121n, // 1sec public withdrawal
-            //             srcPublicCancellation: 122n, // 1sec private cancellation
-            //             dstWithdrawal: 10n, // 10sec finality lock for test
-            //             dstPublicWithdrawal: 100n, // 100sec private withdrawal
-            //             dstCancellation: 101n // 1sec public withdrawal
-            //         }),
-            //         srcChainId,
-            //         dstChainId,
-            //         srcSafetyDeposit: parseEther('0.001'),
-            //         dstSafetyDeposit: parseEther('0.001')
-            //     },
-            //     {
-            //         auction: new Sdk.AuctionDetails({
-            //             initialRateBump: 0,
-            //             points: [],
-            //             duration: 120n,
-            //             startTime: srcTimestamp
-            //         }),
-            //         whitelist: [
-            //             {
-            //                 address: new Address(src.resolver),
-            //                 allowFrom: 0n
-            //             }
-            //         ],
-            //         resolvingStartTime: 0n
-            //     },
-            //     {
-            //         nonce: Sdk.randBigInt(UINT_40_MAX),
-            //         allowPartialFills: false,
-            //         allowMultipleFills: false
-            //     }
-            // )
+            const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
+            const order = Sdk.CrossChainOrder.new(
+                new Address(src.escrowFactory),
+                {
+                    salt: Sdk.randBigInt(1000n),
+                    maker: new Address(await srcChainUser.getAddress()),
+                    makingAmount: 10000n,
+                    takingAmount: 10000n,
+                    makerAsset: new Address(src.weth),
+                    takerAsset: new Address(dst.weth)
+                },
+                {
+                    hashLock: Sdk.HashLock.forSingleFill(secret),
+                    timeLocks: Sdk.TimeLocks.new({
+                        srcWithdrawal: 10n, // 10sec finality lock for test
+                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
+                        srcCancellation: 121n, // 1sec public withdrawal
+                        srcPublicCancellation: 122n, // 1sec private cancellation
+                        dstWithdrawal: 10n, // 10sec finality lock for test
+                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
+                        dstCancellation: 101n // 1sec public withdrawal
+                    }),
+                    srcChainId,
+                    dstChainId,
+                    srcSafetyDeposit: parseEther('0.001'),
+                    dstSafetyDeposit: parseEther('0.001')
+                },
+                {
+                    auction: new Sdk.AuctionDetails({
+                        initialRateBump: 0,
+                        points: [],
+                        duration: 120n,
+                        startTime: srcTimestamp
+                    }),
+                    whitelist: [
+                        {
+                            address: new Address(src.resolver),
+                            allowFrom: 0n
+                        }
+                    ],
+                    resolvingStartTime: 0n
+                },
+                {
+                    nonce: Sdk.randBigInt(UINT_40_MAX),
+                    allowPartialFills: false,
+                    allowMultipleFills: false
+                }
+            )
+            console.log('order', order)
             // const signature = await srcChainUser.signOrder(srcChainId, order)
             // const orderHash = order.getOrderHash(srcChainId)
             // // Resolver fills order
