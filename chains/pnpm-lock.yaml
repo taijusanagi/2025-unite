@@ -14,9 +14,6 @@ importers:
       '@1inch/cross-chain-sdk':
         specifier: v0.1.15-rc.0
         version: 0.1.15-rc.0(assert@2.1.0)
-      '@1inch/limit-order-sdk':
-        specifier: 4.13.0
-        version: 4.13.0(assert@2.1.0)(axios@1.8.2)
       dotenv:
         specifier: 16.4.5
         version: 16.4.5

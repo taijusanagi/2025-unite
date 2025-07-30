@@ -91,7 +91,6 @@ export class Wallet {
     public async signOrder(srcChainId: number, order: Sdk.CrossChainOrder, verifyingContract: string): Promise<string> {
         const typedData = order.getTypedData(srcChainId)
 
-        console.log(typedData)
         typedData.domain.name = '1inch Limit Order Protocol'
         typedData.domain.version = '4'
         typedData.domain.verifyingContract = verifyingContract

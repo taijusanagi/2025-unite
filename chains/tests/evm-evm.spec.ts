@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import {jest} from '@jest/globals'
+import {expect, jest} from '@jest/globals'
 
 import Sdk from '@1inch/cross-chain-sdk'
 import {
@@ -23,7 +23,7 @@ import factoryContract from '../dist/contracts/evm/EscrowFactory.sol/EscrowFacto
 import resolverContract from '../dist/contracts/evm/Resolver.sol/Resolver.json'
 import {deploy, getProvider} from './lib/evm/utils'
 import {CreateServerReturnType} from 'prool'
-import {patchedGetOrderHash} from './lib/evm/patch'
+import {getOrderHashWithPatch} from './lib/evm/patch'
 
 const {Address} = Sdk
 
@@ -71,8 +71,7 @@ describe('evm-evm', () => {
     }
 
     beforeAll(async () => {
-        // t: 0x5FbDB2315678afecb367f032d93F642f64180aa3
-        // l: 0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0
+        initChain(dstChainId)
         ;[src, dst] = await Promise.all([initChain(srcChainId), initChain(dstChainId)])
 
         dstOwner = new Wallet(ownerPk, dst.provider)
@@ -176,28 +175,16 @@ describe('evm-evm', () => {
             )
 
             // patch
-            console.log('order', order)
-            // order.inner.inner.takerAsset = new Address(src.trueERC20)
-            // console.log()
+            // @ts-ignore
+            order.inner.inner.takerAsset = new Address(src.trueERC20)
 
-            // order.takerAsset = new Address(src.trueERC20)
             const signature = await srcChainUser.signOrder(srcChainId, order, src.lop)
-            const patchedHash = patchedGetOrderHash(srcChainId, order, src.lop)
-            console.log('patchedHash', patchedHash)
-            const orderHash = order.getOrderHash(srcChainId)
+            const orderHash = getOrderHashWithPatch(srcChainId, order, src.lop)
 
             // // Resolver fills order
             const resolverContract = new Resolver(src.resolver, dst.resolver)
             console.log(`[${srcChainId}]`, `Filling order ${orderHash}`)
             const fillAmount = order.makingAmount
-
-            console.log(
-                'extension',
-                Sdk.TakerTraits.default()
-                    .setExtension(order.extension)
-                    .setAmountMode(Sdk.AmountMode.maker)
-                    .setAmountThreshold(order.takingAmount)
-            )
 
             const {txHash: orderFillHash, blockHash: srcDeployBlock} = await srcChainResolver.send(
                 resolverContract.deploySrc(
@@ -214,52 +201,49 @@ describe('evm-evm', () => {
                 )
             )
             console.log(`[${srcChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
-            // const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock)
-            // const dstImmutables = srcEscrowEvent[0]
-            //     .withComplement(srcEscrowEvent[1])
-            //     .withTaker(new Address(resolverContract.dstAddress))
-            // console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
-            // const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await dstChainResolver.send(
-            //     resolverContract.deployDst(dstImmutables)
-            // )
-            // console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
-            // const ESCROW_SRC_IMPLEMENTATION = await srcFactory.getSourceImpl()
-            // const ESCROW_DST_IMPLEMENTATION = await dstFactory.getDestinationImpl()
-            // const srcEscrowAddress = new Sdk.EscrowFactory(new Address(src.escrowFactory)).getSrcEscrowAddress(
-            //     srcEscrowEvent[0],
-            //     ESCROW_SRC_IMPLEMENTATION
-            // )
-            // const dstEscrowAddress = new Sdk.EscrowFactory(new Address(dst.escrowFactory)).getDstEscrowAddress(
-            //     srcEscrowEvent[0],
-            //     srcEscrowEvent[1],
-            //     dstDeployedAt,
-            //     new Address(resolverContract.dstAddress),
-            //     ESCROW_DST_IMPLEMENTATION
-            // )
-            // await increaseTime(11)
-            // // User shares key after validation of dst escrow deployment
-            // console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
-            // await dstChainResolver.send(
-            //     resolverContract.withdraw('dst', dstEscrowAddress, secret, dstImmutables.withDeployedAt(dstDeployedAt))
-            // )
-            // console.log(`[${srcChainId}]`, `Withdrawing funds for resolver from ${srcEscrowAddress}`)
-            // const {txHash: resolverWithdrawHash} = await srcChainResolver.send(
-            //     resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
-            // )
-            // console.log(
-            //     `[${srcChainId}]`,
-            //     `Withdrew funds for resolver from ${srcEscrowAddress} to ${src.resolver} in tx ${resolverWithdrawHash}`
-            // )
-            // const resultBalances = await getBalances(
-            //     config.chain.source.tokens.USDC.address,
-            //     config.chain.destination.tokens.USDC.address
-            // )
-            // // user transferred funds to resolver on source chain
-            // expect(initialBalances.src.user - resultBalances.src.user).toBe(order.makingAmount)
-            // expect(resultBalances.src.resolver - initialBalances.src.resolver).toBe(order.makingAmount)
-            // // resolver transferred funds to user on destination chain
-            // expect(resultBalances.dst.user - initialBalances.dst.user).toBe(order.takingAmount)
-            // expect(initialBalances.dst.resolver - resultBalances.dst.resolver).toBe(order.takingAmount)
+            const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock)
+            const dstImmutables = srcEscrowEvent[0]
+                .withComplement(srcEscrowEvent[1])
+                .withTaker(new Address(resolverContract.dstAddress))
+            console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
+            const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await dstChainResolver.send(
+                resolverContract.deployDst(dstImmutables)
+            )
+            console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
+            const ESCROW_SRC_IMPLEMENTATION = await srcFactory.getSourceImpl()
+            const ESCROW_DST_IMPLEMENTATION = await dstFactory.getDestinationImpl()
+            const srcEscrowAddress = new Sdk.EscrowFactory(new Address(src.escrowFactory)).getSrcEscrowAddress(
+                srcEscrowEvent[0],
+                ESCROW_SRC_IMPLEMENTATION
+            )
+            const dstEscrowAddress = new Sdk.EscrowFactory(new Address(dst.escrowFactory)).getDstEscrowAddress(
+                srcEscrowEvent[0],
+                srcEscrowEvent[1],
+                dstDeployedAt,
+                new Address(resolverContract.dstAddress),
+                ESCROW_DST_IMPLEMENTATION
+            )
+            await increaseTime(11)
+            // User shares key after validation of dst escrow deployment
+            console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
+            await dstChainResolver.send(
+                resolverContract.withdraw('dst', dstEscrowAddress, secret, dstImmutables.withDeployedAt(dstDeployedAt))
+            )
+            console.log(`[${srcChainId}]`, `Withdrawing funds for resolver from ${srcEscrowAddress}`)
+            const {txHash: resolverWithdrawHash} = await srcChainResolver.send(
+                resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
+            )
+            console.log(
+                `[${srcChainId}]`,
+                `Withdrew funds for resolver from ${srcEscrowAddress} to ${src.resolver} in tx ${resolverWithdrawHash}`
+            )
+            const resultBalances = await getBalances(src.weth, dst.weth)
+            // user transferred funds to resolver on source chain
+            expect(initialBalances.src.user - resultBalances.src.user).toBe(order.makingAmount)
+            expect(resultBalances.src.resolver - initialBalances.src.resolver).toBe(order.makingAmount)
+            // resolver transferred funds to user on destination chain
+            expect(resultBalances.dst.user - initialBalances.dst.user).toBe(order.takingAmount)
+            expect(initialBalances.dst.resolver - resultBalances.dst.resolver).toBe(order.takingAmount)
         })
     })
 })
