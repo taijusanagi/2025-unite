@@ -5,8 +5,8 @@
     "scripts": {
         "postinstall": "patch-package",
         "test": "forge build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
-        "test:evm-evm": "forge build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js tests/evm-evm.spec.ts",
-        "test:evm-btc": "forge build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js tests/evm-btc.spec.ts",
+        "test:evm": "forge build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js tests/evm.spec.ts",
+        "test:btc": "forge build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js tests/btc.spec.ts",
         "lint": "eslint  \"tests/**/*.ts\""
     },
     "devDependencies": {
@@ -48,8 +48,12 @@
     "dependencies": {
         "@1inch/byte-utils": "2.6.0",
         "@1inch/cross-chain-sdk": "v0.1.15-rc.0",
+        "axios": "^1.11.0",
+        "bitcoinjs-lib": "^6.1.7",
         "dotenv": "16.4.5",
+        "ecpair": "^3.0.0",
         "ethers": "6.13.2",
-        "prool": "0.0.24"
+        "prool": "0.0.24",
+        "tiny-secp256k1": "^2.2.4"
     }
 }
