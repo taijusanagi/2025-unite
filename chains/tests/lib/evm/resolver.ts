@@ -1,6 +1,6 @@
 import {Interface, Signature, TransactionRequest} from 'ethers'
 import Sdk from '@1inch/cross-chain-sdk'
-import Contract from '../dist/contracts/Resolver.sol/Resolver.json'
+import Contract from '../../../dist/contracts/evm/Resolver.sol/Resolver.json'
 
 export class Resolver {
     private readonly iface = new Interface(Contract.abi)

@@ -1,7 +1,7 @@
 [profile.default]
 solc = "0.8.23"
 src = 'contracts/evm/src'
-out = 'dist/evm/contracts'
+out = 'dist/contracts/evm'
 libs = ['contracts/evm/lib']
 
 via_ir = true
