@@ -14,7 +14,7 @@ import {getBalances as evmGetBalances, increaseTime, initChain} from './lib/evm/
 import {getBalance as btcGetBalance} from './lib/btc/utils'
 import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
 import {parseUnits} from 'ethers'
-import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
+import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from './lib/evm/resolver'
 import {getOrderHashWithPatch} from './lib/evm/patch'
 
@@ -254,10 +254,8 @@ describe('btc', () => {
 
             // NOTE: secret is known to the maker — taker only knows the hash
             const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks()
-            const textBuffer = Buffer.from('hello world', 'utf8')
-
             const htlcScript = bitcoin.script.compile([
-                textBuffer,
+                Buffer.from(hexToUint8Array(dstImmutables.hash())),
                 bitcoin.opcodes.OP_DROP,
                 bitcoin.script.number.encode(Number(dstTimeLocks.privateWithdrawal)),
                 bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
@@ -360,14 +358,6 @@ describe('btc', () => {
             // ========================================
             console.log('\n🔓 Phase 2: Maker (user) claims HTLC using secret...')
 
-            const htlcUtxos = await getUtxosFromTxid(btcDstEscrowHash)
-
-            if (!htlcUtxos.length) {
-                console.error('❌ No UTXOs in HTLC address.')
-                return
-            }
-
-            const htlcUtxo = htlcUtxos[0]
             const spendPsbt = new bitcoin.Psbt({network})
 
             const rawTxHex = (await axios.get(`${API_BASE}/tx/${btcDstEscrowHash}/hex`)).data
