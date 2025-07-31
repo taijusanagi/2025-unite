@@ -112,21 +112,12 @@ export async function initChain(
 }
 
 export async function getBalances(
-    srcToken: string,
-    srcChainUser: Wallet,
-    srcResolverContract: Wallet,
-    dstToken: string,
-    dstChainUser: Wallet,
-    dstResolverContract: Wallet
-): Promise<{src: {user: bigint; resolver: bigint}; dst: {user: bigint; resolver: bigint}}> {
-    return {
-        src: {
-            user: await srcChainUser.tokenBalance(srcToken),
-            resolver: await srcResolverContract.tokenBalance(srcToken)
-        },
-        dst: {
-            user: await dstChainUser.tokenBalance(dstToken),
-            resolver: await dstResolverContract.tokenBalance(dstToken)
-        }
-    }
+    inputs: {token: string; user: Wallet; resolver: Wallet}[]
+): Promise<{user: bigint; resolver: bigint}[]> {
+    return Promise.all(
+        inputs.map(async ({token, user, resolver}) => ({
+            user: await user.tokenBalance(token),
+            resolver: await resolver.tokenBalance(token)
+        }))
+    )
 }

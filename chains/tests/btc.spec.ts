@@ -131,14 +131,7 @@ describe('btc', () => {
             const dummyBtcChainId = 137 // set dummy value this first
             const btcChainId = 99999 // just random chain id for now
 
-            const initialBalances = await getBalances(
-                evm.weth,
-                evmUser,
-                evmResolverContract,
-                evm.weth,
-                evmUser,
-                evmResolverContract
-            )
+            const initialBalances = await getBalances([{token: evm.weth, user: evmUser, resolver: evmResolverContract}])
 
             // // User creates order
             const secret = randomBytes(32)

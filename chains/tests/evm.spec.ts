@@ -75,15 +75,10 @@ describe('evm', () => {
     // eslint-disable-next-line max-lines-per-function
     describe('evm -> evm', () => {
         it('should work', async () => {
-            const initialBalances = await getBalances(
-                evmSrc.weth,
-                evmSrcUser,
-                evmSrcResolverContract,
-                evmDst.weth,
-                evmDstUser,
-                evmDstResolverContract
-            )
-
+            const initialBalances = await getBalances([
+                {token: evmSrc.weth, user: evmSrcUser, resolver: evmSrcResolverContract},
+                {token: evmDst.weth, user: evmDstUser, resolver: evmDstResolverContract}
+            ])
             console.log('initialBalances', initialBalances)
             // // User creates order
             const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
@@ -198,20 +193,17 @@ describe('evm', () => {
                 `[${srcChainId}]`,
                 `Withdrew funds for resolver from ${srcEscrowAddress} to ${evmSrc.resolver} in tx ${resolverWithdrawHash}`
             )
-            const resultBalances = await getBalances(
-                evmSrc.weth,
-                evmSrcUser,
-                evmSrcResolverContract,
-                evmDst.weth,
-                evmDstUser,
-                evmDstResolverContract
-            )
+            const resultBalances = await getBalances([
+                {token: evmSrc.weth, user: evmSrcUser, resolver: evmSrcResolverContract},
+                {token: evmDst.weth, user: evmDstUser, resolver: evmDstResolverContract}
+            ])
             // user transferred funds to resolver on source chain
-            expect(initialBalances.src.user - resultBalances.src.user).toBe(order.makingAmount)
-            expect(resultBalances.src.resolver - initialBalances.src.resolver).toBe(order.makingAmount)
+            expect(initialBalances[0].user - resultBalances[0].user).toBe(order.makingAmount)
+            expect(resultBalances[0].resolver - initialBalances[0].resolver).toBe(order.makingAmount)
+
             // resolver transferred funds to user on destination chain
-            expect(resultBalances.dst.user - initialBalances.dst.user).toBe(order.takingAmount)
-            expect(initialBalances.dst.resolver - resultBalances.dst.resolver).toBe(order.takingAmount)
+            expect(resultBalances[1].user - initialBalances[1].user).toBe(order.takingAmount)
+            expect(initialBalances[1].resolver - resultBalances[1].resolver).toBe(order.takingAmount)
         })
     })
 })
