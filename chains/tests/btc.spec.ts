@@ -53,19 +53,12 @@ describe('btc', () => {
 
     const evmChainId = 1
 
-    let evmSrc: Chain
-    let evmDst: Chain
+    let evm: Chain
 
-    let evmDstOwner: Wallet
-    let evmSrcChainUser: Wallet
-    let evmDstChainUser: Wallet
-    let evmSrcChainResolver: Wallet
-    let evmDstChainResolver: Wallet
-
-    let srcFactory: EscrowFactory
-    let dstFactory: EscrowFactory
-    let evmSrcResolverContract: Wallet
-    let evmDstResolverContract: Wallet
+    let evmUser: Wallet
+    let evmResolver: Wallet
+    let evmFactory: EscrowFactory
+    let evmResolverContract: Wallet
 
     let srcTimestamp: bigint
 
@@ -100,38 +93,26 @@ describe('btc', () => {
         console.log('✅ Bitcoin regtest ready.')
 
         console.log('🚀 Set up EVM...')
-        ;[evmSrc, evmDst] = await Promise.all([
+        ;[evm] = await Promise.all([
             initChain(evmChainId, evmOwnerPk, evmResolverPk),
             initChain(evmChainId, evmOwnerPk, evmResolverPk)
         ])
 
-        evmDstOwner = new Wallet(evmOwnerPk, evmDst.provider)
-        evmSrcChainUser = new Wallet(evmUserPk, evmSrc.provider)
-        evmDstChainUser = new Wallet(evmUserPk, evmDst.provider)
+        evmUser = new Wallet(evmUserPk, evm.provider)
+        evmResolver = new Wallet(evmResolverPk, evm.provider)
 
-        console.log('evmDstOwner', await evmDstOwner.getAddress())
-        console.log('evmSrcChainUser', await evmSrcChainUser.getAddress())
-        console.log('evmDstChainUser', await evmDstChainUser.getAddress())
+        evmFactory = new EscrowFactory(evm.provider, evm.escrowFactory)
 
-        evmSrcChainResolver = new Wallet(evmResolverPk, evmSrc.provider)
-        evmDstChainResolver = new Wallet(evmResolverPk, evmDst.provider)
+        await evmUser.deposit(evm.weth, parseUnits('0.001', 18))
+        await evmUser.unlimitedApprove(evm.weth, evm.lop)
 
-        srcFactory = new EscrowFactory(evmSrc.provider, evmSrc.escrowFactory)
-        dstFactory = new EscrowFactory(evmDst.provider, evmDst.escrowFactory)
+        evmResolverContract = await Wallet.fromAddress(evm.resolver, evm.provider)
 
-        await evmSrcChainUser.deposit(evmSrc.weth, parseUnits('0.001', 18))
-        await evmSrcChainUser.approveToken(evmSrc.weth, evmSrc.lop, MaxUint256)
+        await evmResolver.send({to: evmResolverContract, value: parseUnits('0.01', 18)})
+        await evmResolverContract.deposit(evm.weth, parseUnits('0.001', 18))
+        await evmResolverContract.unlimitedApprove(evm.weth, evm.escrowFactory)
 
-        evmSrcResolverContract = await Wallet.fromAddress(evmSrc.resolver, evmSrc.provider)
-        evmDstResolverContract = await Wallet.fromAddress(evmDst.resolver, evmDst.provider)
-
-        await evmDstOwner.send({to: evmDstResolverContract, value: parseUnits('0.01', 18)})
-        await evmDstResolverContract.deposit(evmDst.weth, parseUnits('0.001', 18))
-
-        await evmDstChainResolver.transfer(evmDst.resolver, parseUnits('0.001', 18))
-        await evmDstResolverContract.unlimitedApprove(evmDst.weth, evmDst.escrowFactory)
-
-        srcTimestamp = BigInt((await evmSrc.provider.getBlock('latest'))!.timestamp)
+        srcTimestamp = BigInt((await evm.provider.getBlock('latest'))!.timestamp)
 
         console.log('✅ Evm ready.')
     })
@@ -151,12 +132,12 @@ describe('btc', () => {
             const btcChainId = 99999 // just random chain id for now
 
             const initialBalances = await getBalances(
-                evmSrc.weth,
-                evmSrcChainUser,
-                evmSrcResolverContract,
-                evmDst.weth,
-                evmDstChainUser,
-                evmDstChainResolver
+                evm.weth,
+                evmUser,
+                evmResolverContract,
+                evm.weth,
+                evmUser,
+                evmResolverContract
             )
 
             // // User creates order
@@ -164,13 +145,13 @@ describe('btc', () => {
             const secretHex = uint8ArrayToHex(secret)
 
             const order = Sdk.CrossChainOrder.new(
-                new Address(evmSrc.escrowFactory),
+                new Address(evm.escrowFactory),
                 {
                     salt: Sdk.randBigInt(1000n),
-                    maker: new Address(await evmSrcChainUser.getAddress()),
+                    maker: new Address(await evmUser.getAddress()),
                     makingAmount: 10000n,
                     takingAmount: 9999n,
-                    makerAsset: new Address(evmSrc.weth),
+                    makerAsset: new Address(evm.weth),
                     takerAsset: new Address(nativeTokenAddress)
                 },
                 {
@@ -198,7 +179,7 @@ describe('btc', () => {
                     }),
                     whitelist: [
                         {
-                            address: new Address(evmSrc.resolver),
+                            address: new Address(evm.resolver),
                             allowFrom: 0n
                         }
                     ],
@@ -213,7 +194,7 @@ describe('btc', () => {
 
             // patch
             // @ts-ignore
-            order.inner.inner.takerAsset = new Address(evmSrc.trueERC20)
+            order.inner.inner.takerAsset = new Address(evm.trueERC20)
 
             const {data} = bitcoin.address.fromBech32(btcUserAddress!)
             // @ts-ignore
@@ -221,15 +202,15 @@ describe('btc', () => {
             // @ts-ignore
             order.inner.fusionExtension.dstChainId = btcChainId
 
-            const signature = await evmSrcChainUser.signOrder(evmChainId, order, evmSrc.lop)
-            const orderHash = getOrderHashWithPatch(evmChainId, order, evmSrc.lop)
+            const signature = await evmUser.signOrder(evmChainId, order, evm.lop)
+            const orderHash = getOrderHashWithPatch(evmChainId, order, evm.lop)
 
             // // Resolver fills order
-            const resolverContract = new Resolver(evmSrc.resolver, evmDst.resolver)
+            const resolverContract = new Resolver(evm.resolver, evm.resolver)
             console.log(`[${evmChainId}]`, `Filling order ${orderHash}`)
             const fillAmount = order.makingAmount
 
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmSrcChainResolver.send(
+            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmResolver.send(
                 resolverContract.deploySrc(
                     evmChainId,
                     order,
@@ -240,12 +221,12 @@ describe('btc', () => {
                         .setAmountThreshold(order.takingAmount),
                     fillAmount,
                     order.escrowExtension.hashLockInfo,
-                    evmSrc.lop
+                    evm.lop
                 )
             )
             console.log(`[${evmChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
 
-            const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock)
+            const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
             const dstImmutables = srcEscrowEvent[0]
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
