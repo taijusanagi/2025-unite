@@ -526,13 +526,16 @@ describe('btc', () => {
             // @ts-ignore
             const timeLocks = order.inner.fusionExtension.timeLocks
 
+            const lockInSeconds = 512 // Your desired lock time
+            const sequenceValue = bip68.encode({seconds: lockInSeconds, blocks: undefined})
             const htlcScript = bitcoin.script.compile([
                 Buffer.from(hexToUint8Array(orderHash)), // include orderhash here to maker sign it
                 bitcoin.opcodes.OP_DROP,
                 // bitcoin.script.number.encode(
                 //     bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
                 // ),
-                bitcoin.script.number.encode(10),
+                // bitcoin.script.number.encode(10),
+                bitcoin.script.number.encode(sequenceValue),
                 bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
                 bitcoin.opcodes.OP_DROP,
                 bitcoin.opcodes.OP_IF,
@@ -662,10 +665,24 @@ describe('btc', () => {
             console.log('⏳ Advancing Bitcoin time to satisfy the relative time lock...')
 
             // 2. Mine a new block to confirm this new time
+            console.log('⛏️ Mining a block to confirm the funding transaction...')
             execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 11 ${btcMiningAddress}`)
+            execSync('sleep 2')
 
+            // B. Advance the node's clock PAST the lock time.
+            console.log('⏳ Advancing Bitcoin time to satisfy the relative time lock...')
+            const latestBlockHeader = JSON.parse(
+                execSync(`${BITCOIN_CLI} getblockheader $(${BITCOIN_CLI} getbestblockhash)`).toString().trim()
+            )
+            const newTime = latestBlockHeader.time + lockInSeconds + 100 // Add a buffer
+            execSync(`${BITCOIN_CLI} setmocktime ${newTime}`)
+
+            // C. Mine ANOTHER block to "lock in" the new time.
+            console.log('⛏️ Mining a final block to lock in the new time...')
+            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 11 ${btcMiningAddress}`)
+            execSync('sleep 2')
             // Give the node/explorer a moment to update
-            execSync(`sleep 2`)
+            // execSync(`sleep 2`)
 
             // ========================================
             // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
@@ -684,7 +701,7 @@ describe('btc', () => {
             const rawTxHex = (await axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`)).data
 
             const spendPsbt = new bitcoin.Psbt({network})
-
+            spendPsbt.setVersion(2)
             spendPsbt.addInput({
                 hash: htlcUtxo.txid,
                 index: htlcUtxo.vout,
@@ -692,7 +709,8 @@ describe('btc', () => {
                 redeemScript: htlcScriptBuffer,
                 // sequence: bip68.encode({seconds: Number(timeLocks._srcWithdrawal)}) // or whatever your lock requires
                 // sequence: bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
-                sequence: 11
+                // sequence: 11
+                sequence: sequenceValue
             })
 
             const redeemFee = 1000

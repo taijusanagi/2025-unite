@@ -80,20 +80,4 @@ export async function verifyHTLCScriptHashFromTx(txid: string, htlcScript: Buffe
     }
 }
 
-const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
-    const signature = input.partialSig[0].signature
-
-    const unlockingScript = bitcoin.script.compile([signature, secret, bitcoin.opcodes.OP_TRUE])
-
-    const payment = bitcoin.payments.p2sh({
-        redeem: {
-            input: unlockingScript,
-            output: htlcScript
-        }
-    })
-
-    return {
-        finalScriptSig: payment.input,
-        finalScriptWitness: undefined
-    }
-}
+export const timestampToBlock = () => {}
