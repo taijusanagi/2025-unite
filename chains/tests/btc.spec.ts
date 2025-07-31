@@ -1,6 +1,6 @@
 import {execSync} from 'child_process'
 import {BITCOIN_CLI, broadcastTx, getUtxos, verifyHTLCScriptHashFromTx} from './lib/btc/utils'
-import {jest} from '@jest/globals'
+import {expect, jest} from '@jest/globals'
 import Sdk from '@1inch/cross-chain-sdk'
 import * as bitcoin from 'bitcoinjs-lib'
 import axios from 'axios'
@@ -108,6 +108,11 @@ describe('btc', () => {
         evmDstOwner = new Wallet(evmOwnerPk, evmDst.provider)
         evmSrcChainUser = new Wallet(evmUserPk, evmSrc.provider)
         evmDstChainUser = new Wallet(evmUserPk, evmDst.provider)
+
+        console.log('evmDstOwner', await evmDstOwner.getAddress())
+        console.log('evmSrcChainUser', await evmSrcChainUser.getAddress())
+        console.log('evmDstChainUser', await evmDstChainUser.getAddress())
+
         evmSrcChainResolver = new Wallet(evmResolverPk, evmSrc.provider)
         evmDstChainResolver = new Wallet(evmResolverPk, evmDst.provider)
 
@@ -240,13 +245,23 @@ describe('btc', () => {
             )
             console.log(`[${evmChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
 
+            const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock)
+            const dstImmutables = srcEscrowEvent[0]
+                .withComplement(srcEscrowEvent[1])
+                .withTaker(new Address(resolverContract.dstAddress))
+
+            const rebuiltAddress = bitcoin.address.toBech32(
+                Buffer.from(dstImmutables.maker.toString().slice(2), 'hex'),
+                0,
+                network.bech32
+            )
+            expect(rebuiltAddress).toBe(btcUserAddress) // to make sure the btc user address is available on-chain
+            console.log(`[${evmChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
+
             // ========================================
             // 1️⃣ PHASE 1: Taker (resolver) creates HTLC and deposits BTC
             // ========================================
             console.log('🔐 Phase 1: Taker locking BTC into HTLC...')
-
-            const rebuiltAddress = bitcoin.address.toBech32(data, 0, network.bech32)
-            console.log('rebuiltAddress', rebuiltAddress)
 
             // NOTE: secret is known to the maker — taker only knows the hash
             const hashLock = bitcoin.crypto.sha256(secret)
