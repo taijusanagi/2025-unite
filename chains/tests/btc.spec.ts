@@ -10,9 +10,9 @@ import crypto, {randomBytes} from 'crypto'
 import {Chain} from './lib/evm/types'
 import {Wallet} from './lib/evm/wallet'
 import {EscrowFactory} from './lib/evm/escrow-factory'
-import {getBalances, initChain} from './lib/evm/utils'
+import {getBalances, increaseTime, initChain} from './lib/evm/utils'
 import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
-import {MaxUint256, parseUnits} from 'ethers'
+import {parseUnits} from 'ethers'
 import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from './lib/evm/resolver'
 import {getOrderHashWithPatch} from './lib/evm/patch'
@@ -60,43 +60,18 @@ describe('btc', () => {
     let evmFactory: EscrowFactory
     let evmResolverContract: Wallet
 
-    let srcTimestamp: bigint
+    let evmTimestamp: bigint
+    let btcTimestamp: bigint
+    let btcMiningAddress: string
 
     beforeAll(async () => {
-        console.log('🚀 Starting Esplora Docker container...')
-
-        execSync(
-            `docker run --name esplora -p 50001:50001 -p 8094:80 --rm -d blockstream/esplora bash -c "/srv/explorer/run.sh bitcoin-regtest explorer"`,
-            {stdio: 'inherit'}
-        )
-
-        console.log('⏳ Waiting for Bitcoin node to be ready...')
-        execSync(`sleep 5`)
-
-        console.log('⛏️  Mining and sending funds...')
-
-        execSync(`${BITCOIN_CLI} createwallet mining_address`)
-
-        const miningAddress = execSync(`${BITCOIN_CLI} -rpcwallet=mining_address getnewaddress`).toString().trim()
-
-        execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 101 ${miningAddress}`)
-        execSync(`sleep 5`)
-
-        const testAddresses = [btcUserAddress, btcResolverAddress]
-
-        testAddresses.forEach((addr) => {
-            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address sendtoaddress ${addr} 1`)
-        })
-        execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 2 ${miningAddress}`)
-        execSync(`sleep 2`)
-
-        console.log('✅ Bitcoin regtest ready.')
-
         console.log('🚀 Set up EVM...')
         ;[evm] = await Promise.all([
             initChain(evmChainId, evmOwnerPk, evmResolverPk),
             initChain(evmChainId, evmOwnerPk, evmResolverPk)
         ])
+
+        evmTimestamp = BigInt((await evm.provider.getBlock('latest'))!.timestamp)
 
         evmUser = new Wallet(evmUserPk, evm.provider)
         evmResolver = new Wallet(evmResolverPk, evm.provider)
@@ -112,9 +87,40 @@ describe('btc', () => {
         await evmResolverContract.deposit(evm.weth, parseUnits('0.001', 18))
         await evmResolverContract.unlimitedApprove(evm.weth, evm.escrowFactory)
 
-        srcTimestamp = BigInt((await evm.provider.getBlock('latest'))!.timestamp)
-
         console.log('✅ Evm ready.')
+
+        console.log('🚀 Starting Esplora Docker container...')
+
+        btcTimestamp = evmTimestamp
+        console.log('btcTimestamp', btcTimestamp)
+
+        execSync(
+            `docker run --name esplora -p 50001:50001 -p 8094:80 --rm -d blockstream/esplora bash -c "/srv/explorer/run.sh bitcoin-regtest explorer"`,
+            {stdio: 'inherit'}
+        )
+
+        console.log('⏳ Waiting for Bitcoin node to be ready...')
+        execSync(`sleep 5`)
+
+        console.log('⛏️  Mining and sending funds...')
+
+        execSync(`${BITCOIN_CLI} createwallet mining_address`)
+
+        btcMiningAddress = execSync(`${BITCOIN_CLI} -rpcwallet=mining_address getnewaddress`).toString().trim()
+
+        execSync(`${BITCOIN_CLI} setmocktime ${btcTimestamp}`)
+        execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 101 ${btcMiningAddress}`)
+        execSync(`sleep 5`)
+
+        const testAddresses = [btcUserAddress, btcResolverAddress]
+
+        testAddresses.forEach((addr) => {
+            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address sendtoaddress ${addr} 1`)
+        })
+        execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 2 ${btcMiningAddress}`)
+        execSync(`sleep 2`)
+
+        console.log('✅ Bitcoin regtest ready.')
     })
 
     afterAll(() => {
@@ -135,7 +141,11 @@ describe('btc', () => {
 
             // // User creates order
             const secret = randomBytes(32)
-            const secretHex = uint8ArrayToHex(secret)
+
+            const hashLock = {
+                keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
+                sha256: bitcoin.crypto.sha256(secret)
+            }
 
             const order = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory),
@@ -148,7 +158,7 @@ describe('btc', () => {
                     takerAsset: new Address(nativeTokenAddress)
                 },
                 {
-                    hashLock: Sdk.HashLock.forSingleFill(secretHex),
+                    hashLock: hashLock.keccak256,
                     timeLocks: Sdk.TimeLocks.new({
                         srcWithdrawal: 10n, // 10sec finality lock for test
                         srcPublicWithdrawal: 120n, // 2m for private withdrawal
@@ -168,7 +178,7 @@ describe('btc', () => {
                         initialRateBump: 0,
                         points: [],
                         duration: 120n,
-                        startTime: srcTimestamp
+                        startTime: evmTimestamp
                     }),
                     whitelist: [
                         {
@@ -224,13 +234,20 @@ describe('btc', () => {
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
 
+            const ESCROW_SRC_IMPLEMENTATION = await evmFactory.getSourceImpl()
+            const srcProof = new Sdk.EscrowFactory(new Address(evm.escrowFactory))
+                .getSrcEscrowAddress(srcEscrowEvent[0], ESCROW_SRC_IMPLEMENTATION)
+                .toString()
+
             const rebuiltAddress = bitcoin.address.toBech32(
                 Buffer.from(dstImmutables.maker.toString().slice(2), 'hex'),
                 0,
                 network.bech32
             )
             expect(rebuiltAddress).toBe(btcUserAddress) // to make sure the btc user address is available on-chain
-            console.log(`[${evmChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
+
+            const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks()
+            console.log('dstTimeLocks', dstTimeLocks)
 
             // ========================================
             // 1️⃣ PHASE 1: Taker (resolver) creates HTLC and deposits BTC
@@ -238,24 +255,29 @@ describe('btc', () => {
             console.log('🔐 Phase 1: Taker locking BTC into HTLC...')
 
             // NOTE: secret is known to the maker — taker only knows the hash
-            const hashLock = bitcoin.crypto.sha256(secret)
-
-            const lockTime = 2640000 // Timeout block (taker can refund after this)
 
             const textBuffer = Buffer.from('hello world', 'utf8')
 
+            dstTimeLocks.privateWithdrawal
+
             const htlcScript = bitcoin.script.compile([
+                // order message
                 textBuffer,
+                bitcoin.opcodes.OP_DROP,
+
+                // bitcoin.script.number.encode(Number(btcTimestamp + dstTimeLocks.privateWithdrawal)),
+                bitcoin.script.number.encode(10),
+                bitcoin.opcodes.OP_RELATIVECHECKLOCKTIMEVERIFY, // finality lock
                 bitcoin.opcodes.OP_DROP,
 
                 bitcoin.opcodes.OP_IF,
                 bitcoin.opcodes.OP_SHA256,
-                hashLock,
+                hashLock.sha256,
                 bitcoin.opcodes.OP_EQUALVERIFY,
                 btcUserPubKey, // 👤 Maker can claim with secret
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ELSE,
-                bitcoin.script.number.encode(lockTime),
+                bitcoin.script.number.encode(Number(btcTimestamp + dstTimeLocks.privateCancellation)), // btc does not support public withdraw and cancel, so just put one time for cancel
                 bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
                 bitcoin.opcodes.OP_DROP,
                 btcResolverPubKey, // 👤 Taker can refund after timeout
@@ -322,12 +344,20 @@ describe('btc', () => {
             psbt.finalizeAllInputs()
 
             const txHex = psbt.extractTransaction().toHex()
-            const txid = await broadcastTx(txHex)
+            const dstProof = await broadcastTx(txHex)
 
             console.log('✅ Taker has funded HTLC:')
-            console.log('🔗 TXID:', txid)
+            console.log('🔗 TXID:', dstProof)
 
-            await verifyHTLCScriptHashFromTx(txid, htlcScript)
+            // relayer side
+
+            // verify src
+            await increaseTime([evm], 11)
+            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 11 ${btcMiningAddress}`)
+            execSync(`sleep 2`)
+
+            // verify dst
+            await verifyHTLCScriptHashFromTx(dstProof, htlcScript)
 
             // ========================================
             // 2️⃣ PHASE 2: Maker claims BTC using secret
@@ -349,7 +379,8 @@ describe('btc', () => {
                 hash: htlcUtxo.txid,
                 index: htlcUtxo.vout,
                 nonWitnessUtxo: Buffer.from(rawTxHex, 'hex'),
-                redeemScript: htlcScript
+                redeemScript: htlcScript,
+                sequence: 11 // Enable locktime
             })
 
             const redeemFee = 10000

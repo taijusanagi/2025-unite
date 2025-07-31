@@ -79,9 +79,9 @@ describe('evm', () => {
                 {token: evmSrc.weth, user: evmSrcUser, resolver: evmSrcResolverContract},
                 {token: evmDst.weth, user: evmDstUser, resolver: evmDstResolverContract}
             ])
-            console.log('initialBalances', initialBalances)
             // // User creates order
             const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
+
             const order = Sdk.CrossChainOrder.new(
                 new Address(evmSrc.escrowFactory),
                 {
