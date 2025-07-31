@@ -1,42 +1,71 @@
 import {execSync} from 'child_process'
 import {BITCOIN_CLI, broadcastTx, getUtxos, verifyHTLCScriptHashFromTx} from './lib/btc/utils'
 import {jest} from '@jest/globals'
-
+import Sdk from '@1inch/cross-chain-sdk'
 import * as bitcoin from 'bitcoinjs-lib'
 import axios from 'axios'
 import * as ecc from 'tiny-secp256k1'
 import {ECPairFactory, ECPairInterface} from 'ecpair'
-import crypto from 'crypto'
+import crypto, {randomBytes} from 'crypto'
+import {Chain} from './lib/evm/types'
+import {Wallet} from './lib/evm/wallet'
+import {EscrowFactory} from './lib/evm/escrow-factory'
+import {getBalances, initChain} from './lib/evm/utils'
+import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
+import {MaxUint256, parseUnits} from 'ethers'
+import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
+
+const {Address} = Sdk
 
 jest.setTimeout(1000 * 60)
 
-const network = bitcoin.networks.regtest
-const API_BASE = 'http://localhost:8094/regtest/api'
-
-const ECPair = ECPairFactory(ecc)
-
-const userPk = 'cP7YndPTRomiUQEDfm3zFCMpNgBYyPZLJ84LoB4dZ73NzqJSny4n'
-const resolverPk = 'cUJ4wz3dLzT8v2ZxKtRpU7qyXZ6E1qur87LGCGMehYTkWHnQTMeD'
-
-const userKeyPair: ECPairInterface = ECPair.fromWIF(userPk, network)
-const resolverKeyPair: ECPairInterface = ECPair.fromWIF(resolverPk, network)
-
-const userPubKey = Buffer.from(userKeyPair.publicKey)
-const resolverPubKey = Buffer.from(resolverKeyPair.publicKey)
-
-const userAddress = bitcoin.payments.p2wpkh({
-    pubkey: userPubKey,
-    network
-}).address
-const resolverAddress = bitcoin.payments.p2wpkh({
-    pubkey: resolverPubKey,
-    network
-}).address
-
-console.log('userAddress', userAddress)
-console.log('resolverAddress', resolverAddress)
+// default addresses
+const btcUserPk = 'cP7YndPTRomiUQEDfm3zFCMpNgBYyPZLJ84LoB4dZ73NzqJSny4n'
+const btcResolverPk = 'cUJ4wz3dLzT8v2ZxKtRpU7qyXZ6E1qur87LGCGMehYTkWHnQTMeD'
 
 describe('btc', () => {
+    const network = bitcoin.networks.regtest
+    const API_BASE = 'http://localhost:8094/regtest/api'
+
+    const ECPair = ECPairFactory(ecc)
+
+    const btcUserKeyPair: ECPairInterface = ECPair.fromWIF(btcUserPk, network)
+    const btcResolverKeyPair: ECPairInterface = ECPair.fromWIF(btcResolverPk, network)
+
+    const btcUserPubKey = Buffer.from(btcUserKeyPair.publicKey)
+    const btcResolverPubKey = Buffer.from(btcResolverKeyPair.publicKey)
+
+    const btcUserAddress = bitcoin.payments.p2wpkh({
+        pubkey: btcUserPubKey,
+        network
+    }).address
+    const btcResolverAddress = bitcoin.payments.p2wpkh({
+        pubkey: btcResolverPubKey,
+        network
+    }).address
+
+    console.log('btcUserAddress', btcUserAddress)
+    console.log('btcResolverAddress', btcResolverAddress)
+
+    const srcChainId = 1
+    const dstChainId = 137
+
+    let evmSrc: Chain
+    let evmDst: Chain
+
+    let evmDstOwner: Wallet
+    let evmSrcChainUser: Wallet
+    let evmDstChainUser: Wallet
+    let evmSrcChainResolver: Wallet
+    let evmDstChainResolver: Wallet
+
+    let srcFactory: EscrowFactory
+    let dstFactory: EscrowFactory
+    let evmSrcResolverContract: Wallet
+    let evmDstResolverContract: Wallet
+
+    let srcTimestamp: bigint
+
     beforeAll(async () => {
         console.log('🚀 Starting Esplora Docker container...')
 
@@ -57,7 +86,7 @@ describe('btc', () => {
         execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 101 ${miningAddress}`)
         execSync(`sleep 5`)
 
-        const testAddresses = [userAddress, resolverAddress]
+        const testAddresses = [btcUserAddress, btcResolverAddress]
 
         testAddresses.forEach((addr) => {
             execSync(`${BITCOIN_CLI} -rpcwallet=mining_address sendtoaddress ${addr} 1`)
@@ -66,6 +95,37 @@ describe('btc', () => {
         execSync(`sleep 2`)
 
         console.log('✅ Bitcoin regtest ready.')
+
+        console.log('🚀 Set up EVM...')
+        ;[evmSrc, evmDst] = await Promise.all([
+            initChain(srcChainId, evmOwnerPk, evmResolverPk),
+            initChain(srcChainId, evmOwnerPk, evmResolverPk)
+        ])
+
+        evmDstOwner = new Wallet(evmOwnerPk, evmDst.provider)
+        evmSrcChainUser = new Wallet(evmUserPk, evmSrc.provider)
+        evmDstChainUser = new Wallet(evmUserPk, evmDst.provider)
+        evmSrcChainResolver = new Wallet(evmResolverPk, evmSrc.provider)
+        evmDstChainResolver = new Wallet(evmResolverPk, evmDst.provider)
+
+        srcFactory = new EscrowFactory(evmSrc.provider, evmSrc.escrowFactory)
+        dstFactory = new EscrowFactory(evmDst.provider, evmDst.escrowFactory)
+
+        await evmSrcChainUser.deposit(evmSrc.weth, parseUnits('0.001', 18))
+        await evmSrcChainUser.approveToken(evmSrc.weth, evmSrc.lop, MaxUint256)
+
+        evmSrcResolverContract = await Wallet.fromAddress(evmSrc.resolver, evmSrc.provider)
+        evmDstResolverContract = await Wallet.fromAddress(evmDst.resolver, evmDst.provider)
+
+        await evmDstOwner.send({to: evmDstResolverContract, value: parseUnits('0.01', 18)})
+        await evmDstResolverContract.deposit(evmSrc.weth, parseUnits('0.001', 18))
+
+        await evmDstChainResolver.transfer(evmDst.resolver, parseUnits('0.001', 18))
+        await evmDstResolverContract.unlimitedApprove(evmDst.weth, evmDst.escrowFactory)
+
+        srcTimestamp = BigInt((await evmSrc.provider.getBlock('latest'))!.timestamp)
+
+        console.log('✅ Evm ready.')
     })
 
     afterAll(() => {
@@ -79,15 +139,81 @@ describe('btc', () => {
 
     describe('evm -> btc', () => {
         it('should work', async () => {
+            const srcChainId = 1
+            const dstChainId = 137 // set dummy value this first
+
+            const initialBalances = await getBalances(
+                evmSrc.weth,
+                evmSrcChainUser,
+                evmSrcResolverContract,
+                evmDst.weth,
+                evmDstChainUser,
+                evmDstChainResolver
+            )
+
+            // // User creates order
+            const secret = randomBytes(32)
+            const secretHex = uint8ArrayToHex(secret)
+
+            const order = Sdk.CrossChainOrder.new(
+                new Address(evmSrc.escrowFactory),
+                {
+                    salt: Sdk.randBigInt(1000n),
+                    maker: new Address(await evmSrcChainUser.getAddress()),
+                    makingAmount: 10000n,
+                    takingAmount: 9999n,
+                    makerAsset: new Address(evmSrc.weth),
+                    takerAsset: new Address(evmDst.weth)
+                },
+                {
+                    hashLock: Sdk.HashLock.forSingleFill(secretHex),
+                    timeLocks: Sdk.TimeLocks.new({
+                        srcWithdrawal: 10n, // 10sec finality lock for test
+                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
+                        srcCancellation: 121n, // 1sec public withdrawal
+                        srcPublicCancellation: 122n, // 1sec private cancellation
+                        dstWithdrawal: 10n, // 10sec finality lock for test
+                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
+                        dstCancellation: 101n // 1sec public withdrawal
+                    }),
+                    srcChainId,
+                    dstChainId,
+                    srcSafetyDeposit: 1n,
+                    dstSafetyDeposit: 1n
+                },
+                {
+                    auction: new Sdk.AuctionDetails({
+                        initialRateBump: 0,
+                        points: [],
+                        duration: 120n,
+                        startTime: srcTimestamp
+                    }),
+                    whitelist: [
+                        {
+                            address: new Address(evmSrc.resolver),
+                            allowFrom: 0n
+                        }
+                    ],
+                    resolvingStartTime: 0n
+                },
+                {
+                    nonce: Sdk.randBigInt(UINT_40_MAX),
+                    allowPartialFills: false,
+                    allowMultipleFills: false
+                }
+            )
+
+            // patch
+            // @ts-ignore
+            order.inner.inner.takerAsset = new Address(evmSrc.trueERC20)
+
             // ========================================
             // 1️⃣ PHASE 1: Taker (resolver) creates HTLC and deposits BTC
             // ========================================
             console.log('🔐 Phase 1: Taker locking BTC into HTLC...')
 
             // NOTE: secret is known to the maker — taker only knows the hash
-            const secretHash = bitcoin.crypto.sha256(
-                Buffer.from('c06c1486fc3ebbf5b4ce0b12a6ca10f38f7a738c3de082946112b1fb68d7fe96', 'hex')
-            )
+            const hashLock = bitcoin.crypto.sha256(secret)
 
             const lockTime = 2640000 // Timeout block (taker can refund after this)
 
@@ -99,15 +225,15 @@ describe('btc', () => {
 
                 bitcoin.opcodes.OP_IF,
                 bitcoin.opcodes.OP_SHA256,
-                secretHash,
+                hashLock,
                 bitcoin.opcodes.OP_EQUALVERIFY,
-                userPubKey, // 👤 Maker can claim with secret
+                btcUserPubKey, // 👤 Maker can claim with secret
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ELSE,
                 bitcoin.script.number.encode(lockTime),
                 bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
                 bitcoin.opcodes.OP_DROP,
-                resolverPubKey, // 👤 Taker can refund after timeout
+                btcResolverPubKey, // 👤 Taker can refund after timeout
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ENDIF
             ])
@@ -120,7 +246,7 @@ describe('btc', () => {
             console.log('✅ HTLC P2SH Address:', p2sh.address)
 
             // === Taker (resolver) funds the HTLC ===
-            const utxos = await getUtxos(resolverAddress!)
+            const utxos = await getUtxos(btcResolverAddress!)
             if (!utxos.length) {
                 console.error('❌ No UTXOs available to fund HTLC.')
                 return
@@ -143,7 +269,7 @@ describe('btc', () => {
                     hash: utxo.txid,
                     index: utxo.vout,
                     witnessUtxo: {
-                        script: bitcoin.payments.p2wpkh({pubkey: resolverPubKey, network}).output!,
+                        script: bitcoin.payments.p2wpkh({pubkey: btcResolverPubKey, network}).output!,
                         value: utxo.value
                     }
                 })
@@ -156,15 +282,15 @@ describe('btc', () => {
 
             if (change > 0) {
                 psbt.addOutput({
-                    address: resolverAddress!, // refund to self
+                    address: btcResolverAddress!, // refund to self
                     value: change
                 })
             }
 
             utxos.forEach((_, idx) => {
                 psbt.signInput(idx, {
-                    publicKey: resolverPubKey,
-                    sign: (hash) => Buffer.from(resolverKeyPair.sign(hash))
+                    publicKey: btcResolverPubKey,
+                    sign: (hash) => Buffer.from(btcResolverKeyPair.sign(hash))
                 })
             })
 
@@ -210,15 +336,13 @@ describe('btc', () => {
             }
 
             spendPsbt.addOutput({
-                address: userAddress!,
+                address: btcUserAddress!,
                 value: redeemValue
             })
 
-            const secret = Buffer.from('c06c1486fc3ebbf5b4ce0b12a6ca10f38f7a738c3de082946112b1fb68d7fe96', 'hex')
-
             spendPsbt.signInput(0, {
-                publicKey: userPubKey,
-                sign: (hash) => Buffer.from(userKeyPair.sign(hash))
+                publicKey: btcUserPubKey,
+                sign: (hash) => Buffer.from(btcUserKeyPair.sign(hash))
             })
 
             const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
@@ -266,13 +390,13 @@ describe('btc', () => {
                 bitcoin.opcodes.OP_SHA256,
                 hash,
                 bitcoin.opcodes.OP_EQUALVERIFY,
-                resolverPubKey,
+                btcResolverPubKey,
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ELSE,
                 bitcoin.script.number.encode(lockTime),
                 bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
                 bitcoin.opcodes.OP_DROP,
-                userPubKey,
+                btcUserPubKey,
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ENDIF
             ])
@@ -286,7 +410,7 @@ describe('btc', () => {
 
             // 👤 Maker's P2WPKH funding
             const makerPayment = bitcoin.payments.p2wpkh({
-                pubkey: userPubKey,
+                pubkey: btcUserPubKey,
                 network
             })
 
@@ -336,8 +460,8 @@ describe('btc', () => {
 
             utxos.forEach((_, idx) => {
                 psbt.signInput(idx, {
-                    publicKey: userPubKey,
-                    sign: (hash) => Buffer.from(userKeyPair.sign(hash))
+                    publicKey: btcUserPubKey,
+                    sign: (hash) => Buffer.from(btcUserKeyPair.sign(hash))
                 })
             })
 
@@ -409,14 +533,14 @@ describe('btc', () => {
             }
 
             spendPsbt.addOutput({
-                address: resolverAddress!,
+                address: btcResolverAddress!,
                 value: redeemValue
             })
 
             // Sign the input. This generates the signature and stores it in the PSBT.
             spendPsbt.signInput(0, {
-                publicKey: Buffer.from(resolverKeyPair.publicKey),
-                sign: (hash) => Buffer.from(resolverKeyPair.sign(hash))
+                publicKey: Buffer.from(btcResolverKeyPair.publicKey),
+                sign: (hash) => Buffer.from(btcResolverKeyPair.sign(hash))
             })
 
             // This custom finalizer function assembles the correct scriptSig.

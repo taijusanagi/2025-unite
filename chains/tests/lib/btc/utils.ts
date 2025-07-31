@@ -49,7 +49,7 @@ export async function verifyHTLCScriptHashFromTx(txid: string, htlcScript: Buffe
 
     // Check if any output matches
     const match = tx.outs.find((out) => {
-        out.script.equals(expectedOutputScript)
+        return out.script.equals(expectedOutputScript)
     })
 
     if (match) {

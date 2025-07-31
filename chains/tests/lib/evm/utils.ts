@@ -9,6 +9,7 @@ import wethContract from '../../../dist/contracts/evm/WETH9.sol/WETH9.json'
 import lopContract from '../../../dist/contracts/evm/LimitOrderProtocol.sol/LimitOrderProtocol.json'
 import factoryContract from '../../../dist/contracts/evm/EscrowFactory.sol/EscrowFactory.json'
 import resolverContract from '../../../dist/contracts/evm/Resolver.sol/Resolver.json'
+import {Wallet} from './wallet'
 const {Address} = Sdk
 
 export async function getProvider(
@@ -103,4 +104,24 @@ export async function initChain(
     console.log(`[${chainId}]`, `Resolver contract deployed to`, resolver)
 
     return {node: node, provider, trueERC20, weth, lop, resolver, escrowFactory}
+}
+
+export async function getBalances(
+    srcToken: string,
+    srcChainUser: Wallet,
+    srcResolverContract: Wallet,
+    dstToken: string,
+    dstChainUser: Wallet,
+    dstResolverContract: Wallet
+): Promise<{src: {user: bigint; resolver: bigint}; dst: {user: bigint; resolver: bigint}}> {
+    return {
+        src: {
+            user: await srcChainUser.tokenBalance(srcToken),
+            resolver: await srcResolverContract.tokenBalance(srcToken)
+        },
+        dst: {
+            user: await dstChainUser.tokenBalance(dstToken),
+            resolver: await dstResolverContract.tokenBalance(dstToken)
+        }
+    }
 }
