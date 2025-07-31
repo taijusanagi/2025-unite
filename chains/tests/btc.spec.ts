@@ -17,6 +17,7 @@ import {parseUnits} from 'ethers'
 import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from './lib/evm/resolver'
 import {getOrderHashWithPatch, patchedDomain} from './lib/evm/patch'
+import bip68 from 'bip68'
 
 const {Address} = Sdk
 
@@ -528,8 +529,10 @@ describe('btc', () => {
             const htlcScript = bitcoin.script.compile([
                 Buffer.from(hexToUint8Array(orderHash)), // include orderhash here to maker sign it
                 bitcoin.opcodes.OP_DROP,
-                bitcoin.script.number.encode(Number(timeLocks._srcWithdrawal)),
-                bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+                bitcoin.script.number.encode(
+                    bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
+                ),
+                bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
                 bitcoin.opcodes.OP_DROP,
                 bitcoin.opcodes.OP_IF,
                 bitcoin.opcodes.OP_SHA256,
@@ -538,8 +541,10 @@ describe('btc', () => {
                 btcResolverPubKey,
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ELSE,
-                bitcoin.script.number.encode(Number(timeLocks._srcCancellation)),
-                bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+                bitcoin.script.number.encode(
+                    bip68.encode({seconds: Number(timeLocks._srcCancellation), blocks: undefined})
+                ),
+                bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
                 bitcoin.opcodes.OP_DROP,
                 btcUserPubKey,
                 bitcoin.opcodes.OP_CHECKSIG,
