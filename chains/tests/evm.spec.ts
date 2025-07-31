@@ -9,7 +9,7 @@ import {Wallet} from './lib/evm/wallet'
 import {Resolver} from './lib/evm/resolver'
 import {EscrowFactory} from './lib/evm/escrow-factory'
 
-import {getOrderHashWithPatch} from './lib/evm/patch'
+import {getOrderHashWithPatch, patchedDomain} from './lib/evm/patch'
 import {getBalances, initChain, increaseTime} from './lib/evm/utils'
 import {Chain} from './lib/evm/types'
 import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
@@ -135,7 +135,10 @@ describe('evm', () => {
             order.inner.inner.takerAsset = new Address(evmSrc.trueERC20)
 
             const signature = await evmSrcUser.signOrder(srcChainId, order, evmSrc.lop)
-            const orderHash = getOrderHashWithPatch(srcChainId, order, evmSrc.lop)
+            const orderHash = getOrderHashWithPatch(srcChainId, order, {
+                ...patchedDomain,
+                verifyingContract: evmSrc.lop
+            })
 
             // // Resolver fills order
             const resolverContract = new Resolver(evmSrc.resolver, evmDst.resolver)
@@ -161,6 +164,9 @@ describe('evm', () => {
             const dstImmutables = srcEscrowEvent[0]
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
+
+            console.log('dstImmutables', dstImmutables)
+            console.log('dstImmutables.build()', dstImmutables.build())
             console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
             const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmDstResolver.send(
                 resolverContract.deployDst(dstImmutables)

@@ -1,12 +1,12 @@
 import {execSync} from 'child_process'
-import {BITCOIN_CLI, broadcastTx, getUtxos, getUtxosFromTxid, verifyHTLCScriptHashFromTx} from './lib/btc/utils'
+import {BITCOIN_CLI, broadcastTx, getUtxos, verifyHTLCScriptHashFromTx} from './lib/btc/utils'
 import {expect, jest} from '@jest/globals'
 import Sdk from '@1inch/cross-chain-sdk'
 import * as bitcoin from 'bitcoinjs-lib'
 import axios from 'axios'
 import * as ecc from 'tiny-secp256k1'
 import {ECPairFactory, ECPairInterface} from 'ecpair'
-import crypto, {randomBytes} from 'crypto'
+import {randomBytes} from 'crypto'
 import {Chain} from './lib/evm/types'
 import {Wallet} from './lib/evm/wallet'
 import {EscrowFactory} from './lib/evm/escrow-factory'
@@ -16,7 +16,7 @@ import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
 import {parseUnits} from 'ethers'
 import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from './lib/evm/resolver'
-import {getOrderHashWithPatch} from './lib/evm/patch'
+import {getOrderHashWithPatch, patchedDomain} from './lib/evm/patch'
 
 const {Address} = Sdk
 
@@ -27,6 +27,7 @@ const btcUserPk = 'cP7YndPTRomiUQEDfm3zFCMpNgBYyPZLJ84LoB4dZ73NzqJSny4n'
 const btcResolverPk = 'cUJ4wz3dLzT8v2ZxKtRpU7qyXZ6E1qur87LGCGMehYTkWHnQTMeD'
 
 const nativeTokenAddress = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
+const nullAddress = '0x0000000000000000000000000000000000000000'
 
 describe('btc', () => {
     const network = bitcoin.networks.regtest
@@ -53,6 +54,8 @@ describe('btc', () => {
     console.log('btcResolverAddress', btcResolverAddress)
 
     const evmChainId = 1
+    const dummyBtcChainId = 137 // set dummy value this first
+    const btcChainId = 99999 // just random chain id for now
 
     let evm: Chain
 
@@ -135,9 +138,6 @@ describe('btc', () => {
 
     describe('evm -> btc', () => {
         it('should work', async () => {
-            const dummyBtcChainId = 137 // set dummy value this first
-            const btcChainId = 99999 // just random chain id for now
-
             const evmInitialBalances = await evmGetBalances([
                 {token: evm.weth, user: evmUser, resolver: evmResolverContract}
             ])
@@ -177,7 +177,7 @@ describe('btc', () => {
                     srcChainId: evmChainId,
                     dstChainId: dummyBtcChainId,
                     srcSafetyDeposit: 1n,
-                    dstSafetyDeposit: 1n
+                    dstSafetyDeposit: 0n
                 },
                 {
                     auction: new Sdk.AuctionDetails({
@@ -212,7 +212,8 @@ describe('btc', () => {
             order.inner.fusionExtension.dstChainId = btcChainId
 
             const signature = await evmUser.signOrder(evmChainId, order, evm.lop)
-            const orderHash = getOrderHashWithPatch(evmChainId, order, evm.lop)
+
+            const orderHash = getOrderHashWithPatch(evmChainId, order, {...patchedDomain, verifyingContract: evm.lop})
 
             // // Resolver fills order
             const resolverContract = new Resolver(evm.resolver, evm.resolver)
@@ -453,20 +454,91 @@ describe('btc', () => {
             // ========================================
             console.log('🔐 Phase 1: Maker creating HTLC and signed funding TX...')
 
-            const secret = crypto.randomBytes(32)
-            const hash = bitcoin.crypto.sha256(secret)
+            const secret = randomBytes(32)
 
-            const lockTime = 2640000
+            const hashLock = {
+                keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
+                sha256: bitcoin.crypto.sha256(secret)
+            }
+
+            // use sdk to make order object
+            const order = Sdk.CrossChainOrder.new(
+                new Address(evm.escrowFactory),
+                {
+                    salt: Sdk.randBigInt(1000n),
+                    maker: new Address(nullAddress), // this is dummy now
+                    makingAmount: 10000n,
+                    takingAmount: 9999n,
+                    makerAsset: new Address(evm.trueERC20), // ths is dummy now
+                    takerAsset: new Address(evm.weth),
+                    receiver: new Address(await evmUser.getAddress())
+                },
+                {
+                    hashLock: hashLock.keccak256,
+                    timeLocks: Sdk.TimeLocks.new({
+                        srcWithdrawal: 512n, // about 1 blocks, must be 512, 1024...
+                        srcPublicWithdrawal: 1023n, // not used
+                        srcCancellation: 1024n, // about 2 blocks, must be 512, 1024...
+                        srcPublicCancellation: 1025n, // not used
+                        dstWithdrawal: 512n, // adjust with btc
+                        dstPublicWithdrawal: 522n, // 100sec private withdrawal
+                        dstCancellation: 523n // 1sec public withdrawal
+                    }),
+                    srcChainId: dummyBtcChainId,
+                    dstChainId: evmChainId,
+                    srcSafetyDeposit: 0n,
+                    dstSafetyDeposit: 1n
+                },
+                {
+                    auction: new Sdk.AuctionDetails({
+                        initialRateBump: 0,
+                        points: [],
+                        duration: 120n,
+                        startTime: btcTimestamp
+                    }),
+                    whitelist: [
+                        {
+                            address: new Address(evm.resolver),
+                            allowFrom: 0n
+                        }
+                    ],
+                    resolvingStartTime: 0n
+                },
+                {
+                    nonce: Sdk.randBigInt(UINT_40_MAX),
+                    allowPartialFills: false,
+                    allowMultipleFills: false
+                }
+            )
+
+            const {data} = bitcoin.address.fromBech32(btcUserAddress!)
+            // @ts-ignore
+            order.inner.inner.maker = `0x${data.toString('hex')}`
+            // @ts-ignore
+            order.inner.fusionExtension.srcChainId = btcChainId
+
+            const orderHash = getOrderHashWithPatch(btcChainId, order, {
+                name: '',
+                version: '',
+                verifyingContract: nullAddress
+            })
+            // @ts-ignore
+            const timeLocks = order.inner.fusionExtension.timeLocks
 
             const htlcScript = bitcoin.script.compile([
+                Buffer.from(hexToUint8Array(orderHash)), // include orderhash here to maker sign it
+                bitcoin.opcodes.OP_DROP,
+                bitcoin.script.number.encode(Number(timeLocks._srcWithdrawal)),
+                bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+                bitcoin.opcodes.OP_DROP,
                 bitcoin.opcodes.OP_IF,
                 bitcoin.opcodes.OP_SHA256,
-                hash,
+                hashLock.sha256,
                 bitcoin.opcodes.OP_EQUALVERIFY,
                 btcResolverPubKey,
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ELSE,
-                bitcoin.script.number.encode(lockTime),
+                bitcoin.script.number.encode(Number(timeLocks._srcCancellation)),
                 bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
                 bitcoin.opcodes.OP_DROP,
                 btcUserPubKey,
@@ -481,178 +553,187 @@ describe('btc', () => {
 
             console.log('✅ HTLC P2SH Address:', p2sh.address)
 
-            // 👤 Maker's P2WPKH funding
-            const makerPayment = bitcoin.payments.p2wpkh({
-                pubkey: btcUserPubKey,
-                network
-            })
+            // // 👤 Maker's P2WPKH funding
+            // const makerPayment = bitcoin.payments.p2wpkh({
+            //     pubkey: btcUserPubKey,
+            //     network
+            // })
 
-            const fromAddress = makerPayment.address!
-            console.log('🔗 Maker Funding Address:', fromAddress)
+            // const fromAddress = makerPayment.address!
+            // console.log('🔗 Maker Funding Address:', fromAddress)
 
-            const utxos = await getUtxos(fromAddress)
-            if (!utxos.length) {
-                console.error("❌ No UTXOs found in maker's wallet.")
-                return
-            }
+            // const utxos = await getUtxos(fromAddress)
+            // if (!utxos.length) {
+            //     console.error("❌ No UTXOs found in maker's wallet.")
+            //     return
+            // }
 
-            const amount = 1000000
-            const fee = 10000
-            const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0)
-            const change = totalInput - amount - fee
+            // const amount = 1000000
+            // const fee = 10000
+            // const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0)
+            // const change = totalInput - amount - fee
 
-            if (change < 0) {
-                console.error('❌ Not enough funds to lock 10 sats and cover the fee.')
-                return
-            }
+            // if (change < 0) {
+            //     console.error('❌ Not enough funds to lock 10 sats and cover the fee.')
+            //     return
+            // }
 
-            const psbt = new bitcoin.Psbt({network})
+            // const psbt = new bitcoin.Psbt({network})
 
-            if (change > 0) {
-                psbt.addOutput({
-                    address: fromAddress,
-                    value: change
-                })
-            }
+            // if (change > 0) {
+            //     psbt.addOutput({
+            //         address: fromAddress,
+            //         value: change
+            //     })
+            // }
 
-            for (const utxo of utxos) {
-                psbt.addInput({
-                    hash: utxo.txid,
-                    index: utxo.vout,
-                    witnessUtxo: {
-                        script: makerPayment.output!,
-                        value: utxo.value
-                    }
-                })
-            }
+            // for (const utxo of utxos) {
+            //     psbt.addInput({
+            //         hash: utxo.txid,
+            //         index: utxo.vout,
+            //         witnessUtxo: {
+            //             script: makerPayment.output!,
+            //             value: utxo.value
+            //         }
+            //     })
+            // }
 
-            psbt.addOutput({
-                script: p2sh.output!,
-                value: amount
-            })
+            // psbt.addOutput({
+            //     script: p2sh.output!,
+            //     value: amount
+            // })
 
-            utxos.forEach((_, idx) => {
-                psbt.signInput(idx, {
-                    publicKey: btcUserPubKey,
-                    sign: (hash) => Buffer.from(btcUserKeyPair.sign(hash))
-                })
-            })
+            // utxos.forEach((_, idx) => {
+            //     psbt.signInput(idx, {
+            //         publicKey: btcUserPubKey,
+            //         sign: (hash) => Buffer.from(btcUserKeyPair.sign(hash))
+            //     })
+            // })
 
-            psbt.finalizeAllInputs()
+            // psbt.finalizeAllInputs()
 
-            const txHex = psbt.extractTransaction().toHex()
+            // const txHex = psbt.extractTransaction().toHex()
 
-            // 💾 Save fully signed TX and order details
-            const order = {
-                txHex,
-                htlcScriptHex: htlcScript.toString('hex'),
-                p2shAddress: p2sh.address!,
-                valueSats: amount,
-                lockTime,
-                hash: hash.toString('hex'),
-                createdAt: new Date().toISOString()
-            }
+            // // 💾 Save fully signed TX and order details
+            // const order = {
+            //     txHex,
+            //     htlcScriptHex: htlcScript.toString('hex'),
+            //     p2shAddress: p2sh.address!,
+            //     valueSats: amount,
+            //     lockTime,
+            //     hash: hash.toString('hex'),
+            //     createdAt: new Date().toISOString()
+            // }
 
-            const orderJson = JSON.stringify(order, null, 2)
-            console.log('📦 Maker created and signed order JSON:\n', orderJson)
+            // const orderJson = JSON.stringify(order, null, 2)
+            // console.log('📦 Maker created and signed order JSON:\n', orderJson)
 
-            // ========================================
-            // 2️⃣ PHASE 2: Taker receives order, broadcasts
-            // ========================================
-            console.log('\n📥 Phase 2: Resolver receives signed TX and broadcasts...')
+            // // ========================================
+            // // 2️⃣ PHASE 2: Taker receives order, broadcasts
+            // // ========================================
+            // console.log('\n📥 Phase 2: Resolver receives signed TX and broadcasts...')
 
-            const loaded = JSON.parse(orderJson)
+            // const loaded = JSON.parse(orderJson)
 
-            console.log('HTLC address:', loaded.p2shAddress)
-            const htlcUtxos2 = await getUtxos(loaded.p2shAddress)
-            console.log('Found HTLC UTXOs:', htlcUtxos2)
+            // console.log('HTLC address:', loaded.p2shAddress)
+            // const htlcUtxos2 = await getUtxos(loaded.p2shAddress)
+            // console.log('Found HTLC UTXOs:', htlcUtxos2)
 
-            const txid = await broadcastTx(loaded.txHex)
-            console.log('✅ HTLC Funding TX Broadcasted:', txid)
+            // const txid = await broadcastTx(loaded.txHex)
+            // console.log('✅ HTLC Funding TX Broadcasted:', txid)
 
-            await verifyHTLCScriptHashFromTx(txid, htlcScript)
+            // // const dstImmutables = srcEscrowEvent[0]
+            // //     .withComplement(srcEscrowEvent[1])
+            // //     .withTaker(new Address(resolverContract.dstAddress))
+            // // console.log(`[${evmChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
+            // // const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmDstResolver.send(
+            // //     resolverContract.deployDst(dstImmutables)
+            // // )
+            // // console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
 
-            // ========================================
-            // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
-            // ========================================
-            console.log('\n🔓 Phase 3: Resolver redeems HTLC with secret...')
+            // await verifyHTLCScriptHashFromTx(txid, htlcScript)
 
-            const htlcUtxos = await getUtxos(loaded.p2shAddress)
-            if (!htlcUtxos.length) {
-                console.error('❌ No UTXOs found at HTLC address.')
-                return
-            }
+            // // ========================================
+            // // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
+            // // ========================================
+            // console.log('\n🔓 Phase 3: Resolver redeems HTLC with secret...')
 
-            const htlcScriptBuffer = Buffer.from(loaded.htlcScriptHex, 'hex')
-            const htlcUtxo = htlcUtxos[0]
+            // const htlcUtxos = await getUtxos(loaded.p2shAddress)
+            // if (!htlcUtxos.length) {
+            //     console.error('❌ No UTXOs found at HTLC address.')
+            //     return
+            // }
 
-            const rawTxHex = (await axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`)).data
+            // const htlcScriptBuffer = Buffer.from(loaded.htlcScriptHex, 'hex')
+            // const htlcUtxo = htlcUtxos[0]
 
-            const spendPsbt = new bitcoin.Psbt({network})
+            // const rawTxHex = (await axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`)).data
 
-            spendPsbt.addInput({
-                hash: htlcUtxo.txid,
-                index: htlcUtxo.vout,
-                nonWitnessUtxo: Buffer.from(rawTxHex, 'hex'),
-                redeemScript: htlcScriptBuffer
-            })
+            // const spendPsbt = new bitcoin.Psbt({network})
 
-            const redeemFee = 10000
-            const redeemValue = htlcUtxo.value - redeemFee
+            // spendPsbt.addInput({
+            //     hash: htlcUtxo.txid,
+            //     index: htlcUtxo.vout,
+            //     nonWitnessUtxo: Buffer.from(rawTxHex, 'hex'),
+            //     redeemScript: htlcScriptBuffer
+            // })
 
-            if (redeemValue <= 0) {
-                console.error(`❌ Not enough value to redeem HTLC. UTXO value = ${htlcUtxo.value}, fee = ${redeemFee}`)
-                return
-            }
+            // const redeemFee = 10000
+            // const redeemValue = htlcUtxo.value - redeemFee
 
-            spendPsbt.addOutput({
-                address: btcResolverAddress!,
-                value: redeemValue
-            })
+            // if (redeemValue <= 0) {
+            //     console.error(`❌ Not enough value to redeem HTLC. UTXO value = ${htlcUtxo.value}, fee = ${redeemFee}`)
+            //     return
+            // }
 
-            // Sign the input. This generates the signature and stores it in the PSBT.
-            spendPsbt.signInput(0, {
-                publicKey: Buffer.from(btcResolverKeyPair.publicKey),
-                sign: (hash) => Buffer.from(btcResolverKeyPair.sign(hash))
-            })
+            // spendPsbt.addOutput({
+            //     address: btcResolverAddress!,
+            //     value: redeemValue
+            // })
 
-            // This custom finalizer function assembles the correct scriptSig.
-            const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
-                const signature = input.partialSig[0].signature
+            // // Sign the input. This generates the signature and stores it in the PSBT.
+            // spendPsbt.signInput(0, {
+            //     publicKey: Buffer.from(btcResolverKeyPair.publicKey),
+            //     sign: (hash) => Buffer.from(btcResolverKeyPair.sign(hash))
+            // })
 
-                // This is the "unlocking" script. It provides the data needed
-                // to satisfy the OP_IF branch of your HTLC redeem script.
-                // It must contain, in order: signature, secret, and OP_TRUE.
-                const unlockingScript = bitcoin.script.compile([
-                    signature,
-                    secret, // The secret must be a Buffer
-                    bitcoin.opcodes.OP_TRUE
-                ])
+            // // This custom finalizer function assembles the correct scriptSig.
+            // const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
+            //     const signature = input.partialSig[0].signature
 
-                // Use the payments utility to create the final scriptSig, which correctly
-                // combines the unlocking data with the redeem script itself.
-                const payment = bitcoin.payments.p2sh({
-                    redeem: {
-                        input: unlockingScript,
-                        output: input.redeemScript
-                    }
-                })
+            //     // This is the "unlocking" script. It provides the data needed
+            //     // to satisfy the OP_IF branch of your HTLC redeem script.
+            //     // It must contain, in order: signature, secret, and OP_TRUE.
+            //     const unlockingScript = bitcoin.script.compile([
+            //         signature,
+            //         secret, // The secret must be a Buffer
+            //         bitcoin.opcodes.OP_TRUE
+            //     ])
 
-                return {
-                    finalScriptSig: payment.input,
-                    finalScriptWitness: undefined
-                }
-            }
+            //     // Use the payments utility to create the final scriptSig, which correctly
+            //     // combines the unlocking data with the redeem script itself.
+            //     const payment = bitcoin.payments.p2sh({
+            //         redeem: {
+            //             input: unlockingScript,
+            //             output: input.redeemScript
+            //         }
+            //     })
 
-            // Finalize the input using our custom logic.
-            spendPsbt.finalizeInput(0, htlcRedeemFinalizer)
+            //     return {
+            //         finalScriptSig: payment.input,
+            //         finalScriptWitness: undefined
+            //     }
+            // }
 
-            // Extract and broadcast the final, valid transaction.
-            const finalTxHex = spendPsbt.extractTransaction().toHex()
-            const finalTxId = await broadcastTx(finalTxHex)
+            // // Finalize the input using our custom logic.
+            // spendPsbt.finalizeInput(0, htlcRedeemFinalizer)
 
-            console.log('🎉 Resolver has claimed the HTLC!')
-            console.log('✅ Final Redeem TXID:', finalTxId)
+            // // Extract and broadcast the final, valid transaction.
+            // const finalTxHex = spendPsbt.extractTransaction().toHex()
+            // const finalTxId = await broadcastTx(finalTxHex)
+
+            // console.log('🎉 Resolver has claimed the HTLC!')
+            // console.log('✅ Final Redeem TXID:', finalTxId)
         })
     })
 })

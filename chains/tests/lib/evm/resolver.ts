@@ -1,7 +1,7 @@
 import {Interface, Signature, TransactionRequest} from 'ethers'
 import Sdk from '@1inch/cross-chain-sdk'
 import Contract from '../../../dist/contracts/evm/Resolver.sol/Resolver.json'
-import {getOrderHashWithPatch} from './patch'
+import {getOrderHashWithPatch, patchedDomain} from './patch'
 
 export class Resolver {
     private readonly iface = new Interface(Contract.abi)
@@ -26,7 +26,7 @@ export class Resolver {
 
         // patch
         // @ts-ignore
-        immutables.orderHash = getOrderHashWithPatch(chainId, order, lop)
+        immutables.orderHash = getOrderHashWithPatch(chainId, order, {...patchedDomain, verifyingContract: lop})
 
         return {
             to: this.srcAddress,
