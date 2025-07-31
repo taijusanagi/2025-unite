@@ -65,10 +65,8 @@ describe('evm', () => {
         evmSrcResolverContract = await Wallet.fromAddress(evmSrc.resolver, evmSrc.provider)
         evmDstResolverContract = await Wallet.fromAddress(evmDst.resolver, evmDst.provider)
 
-        await evmDstOwner.send({to: evmDstResolverContract, value: parseUnits('0.01', 18)})
-        await evmDstResolverContract.deposit(evmSrc.weth, parseUnits('0.001', 18))
-
-        await evmDstChainResolver.transfer(evmDst.resolver, parseUnits('0.001', 18))
+        await evmDstChainResolver.send({to: evmDstResolverContract, value: parseUnits('0.01', 18)})
+        await evmDstResolverContract.deposit(evmDst.weth, parseUnits('0.001', 18))
         await evmDstResolverContract.unlimitedApprove(evmDst.weth, evmDst.escrowFactory)
 
         srcTimestamp = BigInt((await evmSrc.provider.getBlock('latest'))!.timestamp)
@@ -89,8 +87,10 @@ describe('evm', () => {
                 evmSrcResolverContract,
                 evmDst.weth,
                 evmDstChainUser,
-                evmDstChainResolver
+                evmDstResolverContract
             )
+
+            console.log('initialBalances', initialBalances)
             // // User creates order
             const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
             const order = Sdk.CrossChainOrder.new(
@@ -210,7 +210,7 @@ describe('evm', () => {
                 evmSrcResolverContract,
                 evmDst.weth,
                 evmDstChainUser,
-                evmDstChainResolver
+                evmDstResolverContract
             )
             // user transferred funds to resolver on source chain
             expect(initialBalances.src.user - resultBalances.src.user).toBe(order.makingAmount)

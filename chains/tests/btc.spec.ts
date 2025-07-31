@@ -126,7 +126,7 @@ describe('btc', () => {
         evmDstResolverContract = await Wallet.fromAddress(evmDst.resolver, evmDst.provider)
 
         await evmDstOwner.send({to: evmDstResolverContract, value: parseUnits('0.01', 18)})
-        await evmDstResolverContract.deposit(evmSrc.weth, parseUnits('0.001', 18))
+        await evmDstResolverContract.deposit(evmDst.weth, parseUnits('0.001', 18))
 
         await evmDstChainResolver.transfer(evmDst.resolver, parseUnits('0.001', 18))
         await evmDstResolverContract.unlimitedApprove(evmDst.weth, evmDst.escrowFactory)
