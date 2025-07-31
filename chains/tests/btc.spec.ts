@@ -529,9 +529,10 @@ describe('btc', () => {
             const htlcScript = bitcoin.script.compile([
                 Buffer.from(hexToUint8Array(orderHash)), // include orderhash here to maker sign it
                 bitcoin.opcodes.OP_DROP,
-                bitcoin.script.number.encode(
-                    bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
-                ),
+                // bitcoin.script.number.encode(
+                //     bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
+                // ),
+                bitcoin.script.number.encode(10),
                 bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
                 bitcoin.opcodes.OP_DROP,
                 bitcoin.opcodes.OP_IF,
@@ -660,17 +661,8 @@ describe('btc', () => {
 
             console.log('⏳ Advancing Bitcoin time to satisfy the relative time lock...')
 
-            // Get the timestamp of the latest block
-            const latestBlockHeader = JSON.parse(
-                execSync(`${BITCOIN_CLI} getblockheader $(${BITCOIN_CLI} getbestblockhash)`).toString().trim()
-            )
-            const newTime = latestBlockHeader.time + 600 // Add 600s to easily clear the 512s lock
-
-            // 1. Set the node's internal clock to the future
-            execSync(`${BITCOIN_CLI} setmocktime ${newTime}`)
-
             // 2. Mine a new block to confirm this new time
-            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 1 ${btcMiningAddress}`)
+            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 11 ${btcMiningAddress}`)
 
             // Give the node/explorer a moment to update
             execSync(`sleep 2`)
@@ -699,7 +691,8 @@ describe('btc', () => {
                 nonWitnessUtxo: Buffer.from(rawTxHex, 'hex'),
                 redeemScript: htlcScriptBuffer,
                 // sequence: bip68.encode({seconds: Number(timeLocks._srcWithdrawal)}) // or whatever your lock requires
-                sequence: bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
+                // sequence: bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
+                sequence: 11
             })
 
             const redeemFee = 1000
