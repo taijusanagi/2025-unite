@@ -21,6 +21,27 @@ export async function getUtxos(address: string): Promise<UTXO[]> {
     }))
 }
 
+export async function getUtxosFromTxid(txid: string) {
+    const tx = await axios.get(`${API_BASE}/tx/${txid}`).then((res) => res.data)
+
+    const utxos: {txid: string; vout: number; value: number; scriptpubkey: string}[] = []
+
+    for (let i = 0; i < tx.vout.length; i++) {
+        const outspend = await axios.get(`${API_BASE}/tx/${txid}/outspend/${i}`).then((res) => res.data)
+
+        if (!outspend.spent) {
+            utxos.push({
+                txid,
+                vout: i,
+                value: tx.vout[i].value,
+                scriptpubkey: tx.vout[i].scriptpubkey
+            })
+        }
+    }
+
+    return utxos
+}
+
 export async function getBalance(address: string): Promise<number> {
     const utxos = await getUtxos(address)
     return utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0)
