@@ -14,6 +14,8 @@ import {getBalances, initChain} from './lib/evm/utils'
 import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
 import {MaxUint256, parseUnits} from 'ethers'
 import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
+import {Resolver} from './lib/evm/resolver'
+import {getOrderHashWithPatch} from './lib/evm/patch'
 
 const {Address} = Sdk
 
@@ -22,6 +24,8 @@ jest.setTimeout(1000 * 60)
 // default addresses
 const btcUserPk = 'cP7YndPTRomiUQEDfm3zFCMpNgBYyPZLJ84LoB4dZ73NzqJSny4n'
 const btcResolverPk = 'cUJ4wz3dLzT8v2ZxKtRpU7qyXZ6E1qur87LGCGMehYTkWHnQTMeD'
+
+const nativeTokenAddress = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'
 
 describe('btc', () => {
     const network = bitcoin.networks.regtest
@@ -47,8 +51,7 @@ describe('btc', () => {
     console.log('btcUserAddress', btcUserAddress)
     console.log('btcResolverAddress', btcResolverAddress)
 
-    const srcChainId = 1
-    const dstChainId = 137
+    const evmChainId = 1
 
     let evmSrc: Chain
     let evmDst: Chain
@@ -98,8 +101,8 @@ describe('btc', () => {
 
         console.log('🚀 Set up EVM...')
         ;[evmSrc, evmDst] = await Promise.all([
-            initChain(srcChainId, evmOwnerPk, evmResolverPk),
-            initChain(srcChainId, evmOwnerPk, evmResolverPk)
+            initChain(evmChainId, evmOwnerPk, evmResolverPk),
+            initChain(evmChainId, evmOwnerPk, evmResolverPk)
         ])
 
         evmDstOwner = new Wallet(evmOwnerPk, evmDst.provider)
@@ -139,8 +142,8 @@ describe('btc', () => {
 
     describe('evm -> btc', () => {
         it('should work', async () => {
-            const srcChainId = 1
-            const dstChainId = 137 // set dummy value this first
+            const dummyBtcChainId = 137 // set dummy value this first
+            const btcChainId = 99999 // just random chain id for now
 
             const initialBalances = await getBalances(
                 evmSrc.weth,
@@ -163,7 +166,7 @@ describe('btc', () => {
                     makingAmount: 10000n,
                     takingAmount: 9999n,
                     makerAsset: new Address(evmSrc.weth),
-                    takerAsset: new Address(evmDst.weth)
+                    takerAsset: new Address(nativeTokenAddress)
                 },
                 {
                     hashLock: Sdk.HashLock.forSingleFill(secretHex),
@@ -176,8 +179,8 @@ describe('btc', () => {
                         dstPublicWithdrawal: 100n, // 100sec private withdrawal
                         dstCancellation: 101n // 1sec public withdrawal
                     }),
-                    srcChainId,
-                    dstChainId,
+                    srcChainId: evmChainId,
+                    dstChainId: dummyBtcChainId,
                     srcSafetyDeposit: 1n,
                     dstSafetyDeposit: 1n
                 },
@@ -207,10 +210,43 @@ describe('btc', () => {
             // @ts-ignore
             order.inner.inner.takerAsset = new Address(evmSrc.trueERC20)
 
+            const {data} = bitcoin.address.fromBech32(btcUserAddress!)
+            // @ts-ignore
+            order.inner.inner.receiver = `0x${data.toString('hex')}`
+            // @ts-ignore
+            order.inner.fusionExtension.dstChainId = btcChainId
+
+            const signature = await evmSrcChainUser.signOrder(evmChainId, order, evmSrc.lop)
+            const orderHash = getOrderHashWithPatch(evmChainId, order, evmSrc.lop)
+
+            // // Resolver fills order
+            const resolverContract = new Resolver(evmSrc.resolver, evmDst.resolver)
+            console.log(`[${evmChainId}]`, `Filling order ${orderHash}`)
+            const fillAmount = order.makingAmount
+
+            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmSrcChainResolver.send(
+                resolverContract.deploySrc(
+                    evmChainId,
+                    order,
+                    signature,
+                    Sdk.TakerTraits.default()
+                        .setExtension(order.extension)
+                        .setAmountMode(Sdk.AmountMode.maker)
+                        .setAmountThreshold(order.takingAmount),
+                    fillAmount,
+                    order.escrowExtension.hashLockInfo,
+                    evmSrc.lop
+                )
+            )
+            console.log(`[${evmChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+
             // ========================================
             // 1️⃣ PHASE 1: Taker (resolver) creates HTLC and deposits BTC
             // ========================================
             console.log('🔐 Phase 1: Taker locking BTC into HTLC...')
+
+            const rebuiltAddress = bitcoin.address.toBech32(data, 0, network.bech32)
+            console.log('rebuiltAddress', rebuiltAddress)
 
             // NOTE: secret is known to the maker — taker only knows the hash
             const hashLock = bitcoin.crypto.sha256(secret)
