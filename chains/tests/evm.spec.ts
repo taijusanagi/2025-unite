@@ -2,7 +2,7 @@ import 'dotenv/config'
 import {expect, jest} from '@jest/globals'
 
 import Sdk from '@1inch/cross-chain-sdk'
-import {MaxUint256, parseUnits, randomBytes} from 'ethers'
+import {parseUnits, randomBytes} from 'ethers'
 import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 
 import {Wallet} from './lib/evm/wallet'
@@ -10,7 +10,7 @@ import {Resolver} from './lib/evm/resolver'
 import {EscrowFactory} from './lib/evm/escrow-factory'
 
 import {getOrderHashWithPatch} from './lib/evm/patch'
-import {getBalances, initChain} from './lib/evm/utils'
+import {getBalances, initChain, increaseTime} from './lib/evm/utils'
 import {Chain} from './lib/evm/types'
 import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
 
@@ -27,11 +27,10 @@ describe('evm', () => {
     let evmSrc: Chain
     let evmDst: Chain
 
-    let evmDstOwner: Wallet
-    let evmSrcChainUser: Wallet
-    let evmDstChainUser: Wallet
-    let evmSrcChainResolver: Wallet
-    let evmDstChainResolver: Wallet
+    let evmSrcUser: Wallet
+    let evmDstUser: Wallet
+    let evmSrcResolver: Wallet
+    let evmDstResolver: Wallet
 
     let srcFactory: EscrowFactory
     let dstFactory: EscrowFactory
@@ -40,32 +39,27 @@ describe('evm', () => {
 
     let srcTimestamp: bigint
 
-    async function increaseTime(t: number): Promise<void> {
-        await Promise.all([evmSrc, evmDst].map((chain) => chain.provider.send('evm_increaseTime', [t])))
-    }
-
     beforeAll(async () => {
         ;[evmSrc, evmDst] = await Promise.all([
             initChain(srcChainId, evmOwnerPk, evmResolverPk),
             initChain(srcChainId, evmOwnerPk, evmResolverPk)
         ])
 
-        evmDstOwner = new Wallet(evmOwnerPk, evmDst.provider)
-        evmSrcChainUser = new Wallet(evmUserPk, evmSrc.provider)
-        evmDstChainUser = new Wallet(evmUserPk, evmDst.provider)
-        evmSrcChainResolver = new Wallet(evmResolverPk, evmSrc.provider)
-        evmDstChainResolver = new Wallet(evmResolverPk, evmDst.provider)
+        evmSrcUser = new Wallet(evmUserPk, evmSrc.provider)
+        evmDstUser = new Wallet(evmUserPk, evmDst.provider)
+        evmSrcResolver = new Wallet(evmResolverPk, evmSrc.provider)
+        evmDstResolver = new Wallet(evmResolverPk, evmDst.provider)
 
         srcFactory = new EscrowFactory(evmSrc.provider, evmSrc.escrowFactory)
         dstFactory = new EscrowFactory(evmDst.provider, evmDst.escrowFactory)
 
-        await evmSrcChainUser.deposit(evmSrc.weth, parseUnits('0.001', 18))
-        await evmSrcChainUser.approveToken(evmSrc.weth, evmSrc.lop, MaxUint256)
+        await evmSrcUser.deposit(evmSrc.weth, parseUnits('0.001', 18))
+        await evmSrcUser.unlimitedApprove(evmSrc.weth, evmSrc.lop)
 
         evmSrcResolverContract = await Wallet.fromAddress(evmSrc.resolver, evmSrc.provider)
         evmDstResolverContract = await Wallet.fromAddress(evmDst.resolver, evmDst.provider)
 
-        await evmDstChainResolver.send({to: evmDstResolverContract, value: parseUnits('0.01', 18)})
+        await evmDstResolver.send({to: evmDstResolverContract, value: parseUnits('0.01', 18)})
         await evmDstResolverContract.deposit(evmDst.weth, parseUnits('0.001', 18))
         await evmDstResolverContract.unlimitedApprove(evmDst.weth, evmDst.escrowFactory)
 
@@ -83,10 +77,10 @@ describe('evm', () => {
         it('should work', async () => {
             const initialBalances = await getBalances(
                 evmSrc.weth,
-                evmSrcChainUser,
+                evmSrcUser,
                 evmSrcResolverContract,
                 evmDst.weth,
-                evmDstChainUser,
+                evmDstUser,
                 evmDstResolverContract
             )
 
@@ -97,7 +91,7 @@ describe('evm', () => {
                 new Address(evmSrc.escrowFactory),
                 {
                     salt: Sdk.randBigInt(1000n),
-                    maker: new Address(await evmSrcChainUser.getAddress()),
+                    maker: new Address(await evmSrcUser.getAddress()),
                     makingAmount: 10000n,
                     takingAmount: 9999n,
                     makerAsset: new Address(evmSrc.weth),
@@ -145,7 +139,7 @@ describe('evm', () => {
             // @ts-ignore
             order.inner.inner.takerAsset = new Address(evmSrc.trueERC20)
 
-            const signature = await evmSrcChainUser.signOrder(srcChainId, order, evmSrc.lop)
+            const signature = await evmSrcUser.signOrder(srcChainId, order, evmSrc.lop)
             const orderHash = getOrderHashWithPatch(srcChainId, order, evmSrc.lop)
 
             // // Resolver fills order
@@ -153,7 +147,7 @@ describe('evm', () => {
             console.log(`[${srcChainId}]`, `Filling order ${orderHash}`)
             const fillAmount = order.makingAmount
 
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmSrcChainResolver.send(
+            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmSrcResolver.send(
                 resolverContract.deploySrc(
                     srcChainId,
                     order,
@@ -173,7 +167,7 @@ describe('evm', () => {
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
             console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
-            const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmDstChainResolver.send(
+            const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmDstResolver.send(
                 resolverContract.deployDst(dstImmutables)
             )
             console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
@@ -190,14 +184,14 @@ describe('evm', () => {
                 new Address(resolverContract.dstAddress),
                 ESCROW_DST_IMPLEMENTATION
             )
-            await increaseTime(11)
+            await increaseTime([evmSrc, evmDst], 11)
             // User shares key after validation of dst escrow deployment
             console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
-            await evmDstChainResolver.send(
+            await evmDstResolver.send(
                 resolverContract.withdraw('dst', dstEscrowAddress, secret, dstImmutables.withDeployedAt(dstDeployedAt))
             )
             console.log(`[${srcChainId}]`, `Withdrawing funds for resolver from ${srcEscrowAddress}`)
-            const {txHash: resolverWithdrawHash} = await evmSrcChainResolver.send(
+            const {txHash: resolverWithdrawHash} = await evmSrcResolver.send(
                 resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
             )
             console.log(
@@ -206,10 +200,10 @@ describe('evm', () => {
             )
             const resultBalances = await getBalances(
                 evmSrc.weth,
-                evmSrcChainUser,
+                evmSrcUser,
                 evmSrcResolverContract,
                 evmDst.weth,
-                evmDstChainUser,
+                evmDstUser,
                 evmDstResolverContract
             )
             // user transferred funds to resolver on source chain

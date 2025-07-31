@@ -10,7 +10,12 @@ import lopContract from '../../../dist/contracts/evm/LimitOrderProtocol.sol/Limi
 import factoryContract from '../../../dist/contracts/evm/EscrowFactory.sol/EscrowFactory.json'
 import resolverContract from '../../../dist/contracts/evm/Resolver.sol/Resolver.json'
 import {Wallet} from './wallet'
+import {Chain} from './types'
 const {Address} = Sdk
+
+export async function increaseTime(chains: Chain[], t: number): Promise<void> {
+    await Promise.all(chains.map((chain) => chain.provider.send('evm_increaseTime', [t])))
+}
 
 export async function getProvider(
     chainId: number
