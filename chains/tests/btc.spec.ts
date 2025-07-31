@@ -10,7 +10,7 @@ import {randomBytes} from 'crypto'
 import {Chain} from './lib/evm/types'
 import {Wallet} from './lib/evm/wallet'
 import {EscrowFactory} from './lib/evm/escrow-factory'
-import {getBalances as evmGetBalances, increaseTime, initChain} from './lib/evm/utils'
+import {getBalances as evmGetBalances, increaseTime, initChain, setDeployedAt} from './lib/evm/utils'
 import {getBalance as btcGetBalance} from './lib/btc/utils'
 import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
 import {parseUnits} from 'ethers'
@@ -238,9 +238,12 @@ describe('btc', () => {
             console.log(`[${evmChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
 
             const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
+
             const dstImmutables = srcEscrowEvent[0]
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
+
+            console.log('debug:', dstImmutables)
 
             const rebuiltAddress = bitcoin.address.toBech32(
                 Buffer.from(dstImmutables.maker.toString().slice(2), 'hex'),
@@ -514,7 +517,7 @@ describe('btc', () => {
 
             const {data} = bitcoin.address.fromBech32(btcUserAddress!)
             // @ts-ignore
-            order.inner.inner.maker = `0x${data.toString('hex')}`
+            order.inner.inner.maker = new Address(`0x${data.toString('hex')}`)
             // @ts-ignore
             order.inner.fusionExtension.srcChainId = btcChainId
 
@@ -651,23 +654,81 @@ describe('btc', () => {
             const txid = await broadcastTx(loaded.txHex)
             console.log('✅ HTLC Funding TX Broadcasted:', txid)
 
-            // const dstImmutables = srcEscrowEvent[0]
-            //     .withComplement(srcEscrowEvent[1])
-            //     .withTaker(new Address(resolverContract.dstAddress))
-            // console.log(`[${evmChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
-            // const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmDstResolver.send(
-            //     resolverContract.deployDst(dstImmutables)
-            // )
-            // console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
-
-            await verifyHTLCScriptHashFromTx(txid, htlcScript)
-
             console.log('⏳ Advancing Bitcoin time to satisfy the relative time lock...')
 
             // 2. Mine a new block to confirm this new time
             console.log('⛏️ Mining a block to confirm the funding transaction...')
-            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 11 ${btcMiningAddress}`)
+            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 1 ${btcMiningAddress}`)
             execSync('sleep 2')
+
+            // get confirmed time
+            const txDetails = (await axios.get(`${API_BASE}/tx/${txid}`)).data
+            const blockHeight = txDetails.status.block_height
+            const blockDetails = (await axios.get(`${API_BASE}/block-height/${blockHeight}`)).data
+            const blockHash = blockDetails
+            const blockInfo = (await axios.get(`${API_BASE}/block/${blockHash}`)).data
+            const confirmedTime = blockInfo.timestamp
+
+            console.log('⏱️ Confirmed BTC HTLC funding time:', confirmedTime)
+
+            // IBaseEscrow.Immutables memory immutables = IBaseEscrow.Immutables({
+            //     orderHash: orderHash,
+            //     hashlock: hashlock,
+            //     maker: order.maker,
+            //     taker: Address.wrap(uint160(taker)),
+            //     token: order.makerAsset,
+            //     amount: makingAmount,
+            //     safetyDeposit: extraDataArgs.deposits >> 128,
+            //     timelocks: extraDataArgs.timelocks.setDeployedAt(block.timestamp)
+            // });
+
+            // DstImmutablesComplement memory immutablesComplement = DstImmutablesComplement({
+            //     maker: order.receiver.get() == address(0) ? order.maker : order.receiver,
+            //     amount: takingAmount,
+            //     token: extraDataArgs.dstToken,
+            //     safetyDeposit: extraDataArgs.deposits & type(uint128).max,
+            //     chainId: extraDataArgs.dstChainId
+            // });
+
+            // (Sdk.Immutables.new({
+            //     orderHash: immutables[0],
+            //     hashLock: Sdk.HashLock.fromString(immutables[1]),
+            //     maker: Sdk.Address.fromBigInt(immutables[2]),
+            //     taker: Sdk.Address.fromBigInt(immutables[3]),
+            //     token: Sdk.Address.fromBigInt(immutables[4]),
+            //     amount: immutables[5],
+            //     safetyDeposit: immutables[6],
+            //     timeLocks: Sdk.TimeLocks.fromBigInt(immutables[7])
+            // }),
+            //     Sdk.DstImmutablesComplement.new({
+            //         maker: Sdk.Address.fromBigInt(complement[0]),
+            //         amount: complement[1],
+            //         token: Sdk.Address.fromBigInt(complement[2]),
+            //         safetyDeposit: complement[3]
+            //     }))
+
+            console.log('order.maker', order.maker)
+
+            const dstImmutables = Sdk.Immutables.new({
+                orderHash: orderHash,
+                hashLock: hashLock.keccak256,
+                maker: order.maker,
+                taker: new Sdk.Address(await evmResolverContract.getAddress()),
+                token: new Address(evm.weth),
+                amount: order.takingAmount,
+                // @ts-ignore
+                safetyDeposit: order.inner.fusionExtension.dstSafetyDeposit,
+                timeLocks: Sdk.TimeLocks.fromBigInt(setDeployedAt(timeLocks.build(), confirmedTime))
+            })
+
+            console.log('dstImmutables', dstImmutables)
+
+            const resolverContract = new Resolver(evm.resolver, evm.resolver)
+            console.log(`[${evmChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
+            const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmResolver.send(
+                resolverContract.deployDst(dstImmutables)
+            )
+            console.log(`[${evmChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
 
             // B. Advance the node's clock PAST the lock time.
             console.log('⏳ Advancing Bitcoin time to satisfy the relative time lock...')
@@ -679,10 +740,12 @@ describe('btc', () => {
 
             // C. Mine ANOTHER block to "lock in" the new time.
             console.log('⛏️ Mining a final block to lock in the new time...')
-            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 11 ${btcMiningAddress}`)
+            execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 10 ${btcMiningAddress}`)
             execSync('sleep 2')
-            // Give the node/explorer a moment to update
-            // execSync(`sleep 2`)
+
+            // check finality
+
+            await verifyHTLCScriptHashFromTx(txid, htlcScript)
 
             // ========================================
             // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
@@ -707,9 +770,6 @@ describe('btc', () => {
                 index: htlcUtxo.vout,
                 nonWitnessUtxo: Buffer.from(rawTxHex, 'hex'),
                 redeemScript: htlcScriptBuffer,
-                // sequence: bip68.encode({seconds: Number(timeLocks._srcWithdrawal)}) // or whatever your lock requires
-                // sequence: bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
-                // sequence: 11
                 sequence: sequenceValue
             })
 
