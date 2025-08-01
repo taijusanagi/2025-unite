@@ -510,8 +510,8 @@ export default function Home() {
         toChainName={toChain.name}
         fromAmount={amount.toString()}
         toAmount={amount.toString()}
-        fromSymbol={fromChain.symbol}
-        toSymbol={toChain.symbol}
+        fromSymbol={fromChain.unit}
+        toSymbol={toChain.unit}
       />
     </>
   );

@@ -129,15 +129,28 @@ const StatusModal: React.FC<StatusModalProps> = ({
           className="space-y-1 max-h-[40vh] overflow-y-auto pr-3 -mr-3 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
         >
           {statuses.map((status, index) => (
-            <div key={index} className="flex">
+            <div key={index} className="flex items-start">
               <div className="flex flex-col items-center mr-4">
                 <StatusIcon state={status.state} />
                 {index < statuses.length - 1 && (
                   <div className="w-px flex-grow bg-gray-600" />
                 )}
               </div>
-              <div className="pb-6 pt-0.5">
-                <p className="text-gray-200">{status.text}</p>
+              <div className="pb-6">
+                {status.text.length > 120 ? (
+                  <pre className="text-gray-300 text-xs whitespace-pre-wrap bg-gray-900/50 p-2 rounded-md border border-red-500/30 text-left overflow-x-auto">
+                    {(() => {
+                      try {
+                        const parsed = JSON.parse(status.text);
+                        return JSON.stringify(parsed, null, 2);
+                      } catch {
+                        return status.text;
+                      }
+                    })()}
+                  </pre>
+                ) : (
+                  <p className="text-gray-200">{status.text}</p>
+                )}
                 {status.explorerUrl && (
                   <a
                     href={status.explorerUrl}
