@@ -76,8 +76,8 @@ const StatusModal: React.FC<StatusModalProps> = ({
   const isComplete = statuses.every((s) => s.state !== "loading");
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 backdrop-blur-sm">
-      <div className="bg-gray-800 border border-blue-900/50 rounded-lg shadow-xl w-full max-w-md p-6 m-4 flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md">
+      <div className="bg-slate-900/80 border border-slate-700 rounded-lg shadow-2xl w-full max-w-md p-6 m-4 flex flex-col">
         <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold text-white">{title}</h2>
           {isComplete && (
@@ -91,7 +91,7 @@ const StatusModal: React.FC<StatusModalProps> = ({
         </div>
 
         {/* Swap Information Section */}
-        <div className="my-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+        <div className="my-4 p-4 bg-black/20 rounded-lg border border-gray-700">
           <div className="flex items-center justify-between text-sm">
             <div className="text-left">
               <p className="text-gray-400">From</p>
@@ -138,7 +138,7 @@ const StatusModal: React.FC<StatusModalProps> = ({
               </div>
               <div className="pb-6">
                 {status.text.length > 120 ? (
-                  <pre className="text-gray-300 text-xs whitespace-pre-wrap bg-gray-900/50 p-2 rounded-md border border-red-500/30 text-left overflow-x-auto">
+                  <pre className="text-gray-300 text-xs whitespace-pre-wrap bg-black/20 p-2 rounded-md border border-red-500/30 text-left overflow-x-auto">
                     {(() => {
                       try {
                         const parsed = JSON.parse(status.text);

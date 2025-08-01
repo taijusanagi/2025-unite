@@ -21,11 +21,11 @@ const ConnectModal: React.FC<ConnectModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 cursor-pointer"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md cursor-pointer"
       onClick={onClose}
     >
       <div
-        className="bg-gray-900 p-6 rounded-xl w-96 text-white space-y-6 relative cursor-default border border-blue-900/50 shadow-xl"
+        className="bg-slate-900/80 p-6 rounded-xl w-96 text-white space-y-6 relative cursor-default border border-slate-700 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Section 1: Chain Abstraction */}
