@@ -222,7 +222,13 @@ export default function Home() {
 
       // 3. Sign order
       addStatus("Sign the order in your wallet");
-      const secret = uint8ArrayToHex(randomBytes(32));
+
+      const secret = randomBytes(32);
+      const hashLock = {
+        keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
+        sha256: bitcoin.crypto.sha256(secret),
+      };
+
       const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
       let takerAsset = new Address(nativeTokenAddress);
@@ -241,7 +247,7 @@ export default function Home() {
           takerAsset,
         },
         {
-          hashLock: Sdk.HashLock.forSingleFill(secret),
+          hashLock: hashLock.keccak256,
           timeLocks: Sdk.TimeLocks.new({
             srcWithdrawal: 10n,
             srcPublicWithdrawal: 120n,
@@ -315,11 +321,13 @@ export default function Home() {
         body: JSON.stringify(
           {
             hash,
+            hashLock,
             srcChainId,
             dstChainId,
             order: order.build(),
             extension: order.extension,
             signature,
+            btcPublicKey: btcUserWallet?.publicKey.toString(),
           },
           (_, value) => (typeof value === "bigint" ? value.toString() : value)
         ),

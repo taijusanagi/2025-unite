@@ -9,6 +9,9 @@ import { Resolver } from "@sdk/evm/resolver";
 import { EscrowFactory } from "@sdk/evm/escrow-factory";
 import { Address } from "@1inch/cross-chain-sdk";
 
+import * as bitcoin from "bitcoinjs-lib";
+import { hexToUint8Array } from "@1inch/byte-utils";
+
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 
 export async function POST(
@@ -33,6 +36,7 @@ export async function POST(
     }
 
     const {
+      hashLock,
       srcChainId,
       dstChainId,
       order: _order,
@@ -59,6 +63,7 @@ export async function POST(
     console.log("Escrow deployment in source chain");
     if (config[srcChainId].type === "btc") {
       console.log("Source chain: BTC");
+
       srcImmutables = {} as any;
       complement = {} as any;
       dstImmutables = {} as any;
@@ -124,6 +129,29 @@ export async function POST(
     console.log("Escrow deployment in destination chain");
     if (config[dstChainId].type === "btc") {
       console.log("Destination chain: BTC");
+
+      const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks();
+      const htlcScript = bitcoin.script.compile([
+        Buffer.from(hexToUint8Array(dstImmutables.hash())),
+        bitcoin.opcodes.OP_DROP,
+        bitcoin.script.number.encode(Number(dstTimeLocks.privateWithdrawal)),
+        bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+        bitcoin.opcodes.OP_DROP,
+        bitcoin.opcodes.OP_IF,
+        bitcoin.opcodes.OP_SHA256,
+        hashLock.sha256,
+        bitcoin.opcodes.OP_EQUALVERIFY,
+        btcUser.publicKey, // 👤 Maker can claim with secret
+        bitcoin.opcodes.OP_CHECKSIG,
+        bitcoin.opcodes.OP_ELSE,
+        bitcoin.script.number.encode(Number(dstTimeLocks.privateCancellation)),
+        bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+        bitcoin.opcodes.OP_DROP,
+        btcResolver.publicKey, // 👤 Taker can refund after timeout
+        bitcoin.opcodes.OP_CHECKSIG,
+        bitcoin.opcodes.OP_ENDIF,
+      ]);
+
       dstEscrowAddress = "";
       dstDeployedAt = 0n;
       dstDeployHash = "";

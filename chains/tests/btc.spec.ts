@@ -4,13 +4,13 @@ import {expect, jest} from '@jest/globals'
 import Sdk from '@1inch/cross-chain-sdk'
 import * as bitcoin from 'bitcoinjs-lib'
 import axios from 'axios'
-import * as ecc from 'tiny-secp256k1'
-import {ECPairFactory, ECPairInterface} from 'ecpair'
+
 import {randomBytes} from 'crypto'
 import {Chain} from './test-utils/evm'
 import {Wallet} from '../sdk/evm/wallet'
 import {EscrowFactory} from '../sdk/evm/escrow-factory'
 import {getBalances as evmGetBalances, increaseTime, initChain, setDeployedAt} from './test-utils/evm'
+
 import {getBalance as btcGetBalance} from './lib/btc/utils'
 import {evmOwnerPk, evmResolverPk, evmUserPk} from './test-utils/evm'
 import {parseUnits} from 'ethers'
@@ -18,7 +18,7 @@ import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from '../sdk/evm/resolver'
 import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
 import bip68 from 'bip68'
-import {walletFromWIF} from '../sdk/btc'
+import {walletFromWIF, addressToEthAddressFormat} from '../sdk/btc'
 
 const {Address} = Sdk
 
@@ -191,10 +191,8 @@ describe('btc', () => {
             // patch
             // @ts-ignore
             order.inner.inner.takerAsset = new Address(evm.trueERC20)
-
-            const {data} = bitcoin.address.fromBech32(btcUser.address!)
             // @ts-ignore
-            order.inner.inner.receiver = `0x${data.toString('hex')}`
+            order.inner.inner.receiver = addressToEthAddressFormat(btcUser.address!)
             // @ts-ignore
             order.inner.fusionExtension.dstChainId = btcChainId
 
@@ -466,7 +464,7 @@ describe('btc', () => {
                 new Address(evm.escrowFactory),
                 {
                     salt: Sdk.randBigInt(1000n),
-                    maker: new Address(`0x${bitcoin.address.fromBech32(btcUser.address!).data.toString('hex')}`),
+                    maker: new Address(addressToEthAddressFormat(btcUser.address!)),
                     makingAmount: 10000n,
                     takingAmount: 9999n,
                     makerAsset: new Address(evm.trueERC20), // ths is dummy now

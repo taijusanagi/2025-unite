@@ -4,11 +4,19 @@ import redis, { connectRedis } from "@/lib/redis";
 
 export async function POST(req: Request) {
   try {
-    const { hash, srcChainId, dstChainId, order, extension, signature } =
-      await req.json();
+    const {
+      hash,
+      hashLock,
+      srcChainId,
+      dstChainId,
+      order,
+      extension,
+      signature,
+    } = await req.json();
 
     if (
       !hash ||
+      !hashLock ||
       !srcChainId ||
       !dstChainId ||
       !order ||
@@ -19,6 +27,7 @@ export async function POST(req: Request) {
     }
 
     const payload = {
+      hashLock,
       srcChainId,
       dstChainId,
       order,

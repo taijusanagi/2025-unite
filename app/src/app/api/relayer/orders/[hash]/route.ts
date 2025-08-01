@@ -16,9 +16,7 @@ export async function GET(
     if (!data) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
-
-    const { ...rest } = JSON.parse(data);
-    return NextResponse.json({ hash, ...rest });
+    return NextResponse.json({ hash, ...JSON.parse(data) });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });
