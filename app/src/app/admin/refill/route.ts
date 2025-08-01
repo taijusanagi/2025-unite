@@ -7,7 +7,7 @@ import IWETHContract from "@/lib/contracts/IWETH.json";
 import ResolverContract from "@/lib/contracts/Resolver.json";
 import { UINT_256_MAX } from "@1inch/byte-utils";
 
-const privateKey = process.env.PRIVATE_KEY || "0x";
+const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 
 export async function GET() {
   const depositAmount = parseEther("0.01");
