@@ -50,6 +50,7 @@ export default function Home() {
   const signer = useEthersSigner();
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
+  const [btcConnectedAddress, setBtcConnectedAddress] = useState("");
 
   // State for BTC connection
   const [btcPrivateKey, setBtcPrivateKey] = useState<string | null>(null);
@@ -111,7 +112,7 @@ export default function Home() {
 
       localStorage.setItem("btcTestnetPrivateKey", privateKey);
       setBtcPrivateKey(privateKey);
-      alert(`BTC Testnet wallet connected successfully! Address: ${address}`);
+      setBtcConnectedAddress(address);
       setIsBtcConnectModalOpen(false);
     } catch (e) {
       console.error(e);
@@ -130,14 +131,13 @@ export default function Home() {
       setIsConnectModalOpen(true);
       return;
     }
+    if (fromChain.type === "evm" && connectedChainId !== fromChain.chainId) {
+      alert("Please switch to the 'From' network in your wallet.");
+      return;
+    }
     if (fromChain.type === "btc" && !btcPrivateKey) {
       alert("Please connect your BTC Testnet wallet first.");
       btcConnectWallet();
-      return;
-    }
-
-    if (fromChain.type === "evm" && connectedChainId !== fromChain.chainId) {
-      alert("Please switch to the 'From' network in your wallet.");
       return;
     }
 
