@@ -7,16 +7,16 @@ import axios from 'axios'
 import * as ecc from 'tiny-secp256k1'
 import {ECPairFactory, ECPairInterface} from 'ecpair'
 import {randomBytes} from 'crypto'
-import {Chain} from './lib/evm/types'
-import {Wallet} from './lib/evm/wallet'
-import {EscrowFactory} from './lib/evm/escrow-factory'
-import {getBalances as evmGetBalances, increaseTime, initChain, setDeployedAt} from './lib/evm/utils'
+import {Chain} from './test-utils/evm'
+import {Wallet} from '../sdk/evm/wallet'
+import {EscrowFactory} from '../sdk/evm/escrow-factory'
+import {getBalances as evmGetBalances, increaseTime, initChain, setDeployedAt} from './test-utils/evm'
 import {getBalance as btcGetBalance} from './lib/btc/utils'
-import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
+import {evmOwnerPk, evmResolverPk, evmUserPk} from './test-utils/evm'
 import {parseUnits} from 'ethers'
 import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
-import {Resolver} from './lib/evm/resolver'
-import {getOrderHashWithPatch, patchedDomain} from './lib/evm/patch'
+import {Resolver} from '../sdk/evm/resolver'
+import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
 import bip68 from 'bip68'
 
 const {Address} = Sdk
@@ -423,7 +423,12 @@ describe('btc', () => {
 
             console.log(`[${evmChainId}]`, `Withdrawing funds for resolver from ${evmSrcEscrowAddress}`)
             const {txHash: resolverWithdrawHash} = await evmResolver.send(
-                resolverContract.withdraw('src', evmSrcEscrowAddress, uint8ArrayToHex(secret), srcEscrowEvent[0])
+                resolverContract.withdraw(
+                    'src',
+                    evmSrcEscrowAddress,
+                    uint8ArrayToHex(secret),
+                    srcEscrowEvent[0].build()
+                )
             )
 
             console.log(
@@ -775,7 +780,7 @@ describe('btc', () => {
                     'dst',
                     dstEscrowAddress,
                     uint8ArrayToHex(secret),
-                    dstImmutables.withDeployedAt(dstDeployedAt)
+                    dstImmutables.withDeployedAt(dstDeployedAt).build()
                 )
             )
 

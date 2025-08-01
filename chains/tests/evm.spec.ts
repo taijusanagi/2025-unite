@@ -11,7 +11,7 @@ import {EscrowFactory} from '../sdk/evm/escrow-factory'
 
 import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
 import {getBalances, initChain, increaseTime, evmOwnerPk, evmResolverPk, evmUserPk} from './test-utils/evm'
-import {Chain} from '../sdk/evm/types'
+import {Chain} from './test-utils/evm'
 
 const {Address} = Sdk
 
