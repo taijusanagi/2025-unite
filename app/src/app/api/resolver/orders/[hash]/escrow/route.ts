@@ -56,6 +56,7 @@ export async function POST(
     let srcDeployHash: string;
     let dstDeployHash: string;
 
+    console.log("Escrow deployment in source chain");
     if (config[srcChainId].type === "btc") {
       console.log("Source chain: BTC");
       srcImmutables = {} as any;
@@ -120,11 +121,14 @@ export async function POST(
       console.log(`Source escrow address: ${srcEscrowAddress}`);
     }
 
-    if (config[srcChainId].type === "btc") {
+    console.log("Escrow deployment in destination chain");
+    if (config[dstChainId].type === "btc") {
+      console.log("Destination chain: BTC");
       dstEscrowAddress = "";
       dstDeployedAt = 0n;
       dstDeployHash = "";
     } else {
+      console.log("Destination chain: EVM");
       const dstProvider = new JsonRpcProvider(
         config[dstChainId].rpc,
         dstChainId

@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 import { connectRedis } from "@/lib/redis";
 import redis from "@/lib/redis";
 
+// TODO: add finality check
+
 export async function POST(
   req: Request,
   context: { params: Promise<{ hash: string }> }

@@ -25,8 +25,8 @@ export async function GET(
       status,
       srcDeployHash,
       dstDeployHash,
-      srcWithdrawTxHash,
-      dstWithdrawTxHash,
+      srcWithdrawHash,
+      dstWithdrawHash,
     } = parsed;
 
     return NextResponse.json({
@@ -34,8 +34,8 @@ export async function GET(
       status,
       srcDeployHash,
       dstDeployHash,
-      srcWithdrawTxHash,
-      dstWithdrawTxHash,
+      srcWithdrawHash,
+      dstWithdrawHash,
     });
   } catch (err) {
     console.error("Error fetching order status:", err);

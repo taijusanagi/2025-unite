@@ -338,6 +338,7 @@ export default function Home() {
         const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
         const statusJson = await statusRes.json();
         if (statusJson.status === "escrow_created") {
+          await new Promise((r) => setTimeout(r, 10000));
           updateLastStatus("done", [
             {
               explorerUrl: `${fromChain.exproler}/tx/${statusJson.srcDeployHash}`,
@@ -371,11 +372,11 @@ export default function Home() {
         if (statusJson.status === "withdraw_completed") {
           updateLastStatus("done", [
             {
-              explorerUrl: `${fromChain.exproler}/tx/${statusJson.srcWithdrawTxHash}`,
+              explorerUrl: `${fromChain.exproler}/tx/${statusJson.srcWithdrawHash}`,
               network: fromChain.name,
             },
             {
-              explorerUrl: `${toChain.exproler}/tx/${statusJson.dstWithdrawTxHash}`,
+              explorerUrl: `${toChain.exproler}/tx/${statusJson.dstWithdrawHash}`,
               network: toChain.name,
             },
           ]);
