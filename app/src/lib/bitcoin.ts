@@ -685,7 +685,7 @@ async function main() {
   );
 
   // await processWhenTakerAssetIsBTC();
-  await processWhenMakerAssetIsBTC();
+  // await processWhenMakerAssetIsBTC();
 
   // await sendBitcoin({
   //   fromWIF: privKeyA,
