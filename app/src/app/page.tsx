@@ -13,6 +13,7 @@ import { config } from "@/lib/config";
 import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal";
 import BtcConnectModal from "@/components/BtcConnectModal"; // Import the new BTC modal
+import BtcAccountModal from "@/components/BtcAccountModal";
 
 import Sdk from "@sdk/evm/cross-chain-sdk-shims";
 import {
@@ -47,20 +48,27 @@ export default function Home() {
 
   const [fromChain, setFromChain] = useState(chains[0]);
   const [toChain, setToChain] = useState(chains[1]);
-
   const [amount] = useState(5000);
+  const [recipient, setRecipient] = useState("");
+
   const evmsigner = useEthersSigner();
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
-  const [btcConnectedAddress, setBtcConnectedAddress] = useState("");
 
   // State for BTC connection
   const [btcUserWallet, setBtcUserWallet] = useState<BtcWallet | null>(null);
+
+  const connectedWalletType = (() => {
+    if (evmsigner) return "evm";
+    if (btcUserWallet) return "btc";
+    return null;
+  })();
 
   // State for the modals
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isBtcConnectModalOpen, setIsBtcConnectModalOpen] = useState(false);
+  const [isBtcAccountModalOpen, setIsBtcAccountModalOpen] = useState(false);
   const [statuses, setStatuses] = useState<Status[]>([]);
 
   // Check for saved BTC private key on mount
@@ -289,6 +297,7 @@ export default function Home() {
       order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20!);
 
       let signature = "";
+
       if (config[dstChainId].type == "btc") {
         const { data } = bitcoin.address.fromBech32(btcUserWallet!.address);
         // @ts-ignore
@@ -411,8 +420,18 @@ export default function Home() {
           >
             GattaiSwap
           </div>
-          {isWalletConnected ? (
-            <ConnectButton chainStatus={"icon"} accountStatus={"avatar"} />
+          {evmsigner ? (
+            <ConnectButton chainStatus="icon" accountStatus="avatar" />
+          ) : btcUserWallet ? (
+            <div>
+              <button
+                onClick={() => setIsBtcAccountModalOpen(true)}
+                className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white hover:bg-gray-700 cursor-pointer font-mono"
+              >
+                {btcUserWallet.address.slice(0, 6)}...
+                {btcUserWallet.address.slice(-4)}
+              </button>
+            </div>
           ) : (
             <button
               onClick={() => setIsConnectModalOpen(true)}
@@ -555,6 +574,21 @@ export default function Home() {
                 </p>
               </div>
 
+              {config[toChain.chainId].type !== "evm" && (
+                <div className="space-y-2">
+                  <label className="block text-sm text-gray-300">
+                    Recipient Address
+                  </label>
+                  <input
+                    type="text"
+                    value={recipient}
+                    onChange={(e) => setRecipient(e.target.value)}
+                    placeholder="Bitcoin Testnet address (e.g., tb1...)"
+                    className="w-full px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-cyan-500"
+                  />
+                </div>
+              )}
+
               {/* Swap Button */}
               <button
                 className="w-full py-3 mt-4 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
@@ -593,6 +627,16 @@ export default function Home() {
         isOpen={isBtcConnectModalOpen}
         onClose={() => setIsBtcConnectModalOpen(false)}
         onConnect={handleBtcConnect}
+      />
+      <BtcAccountModal
+        isOpen={isBtcAccountModalOpen}
+        onClose={() => setIsBtcAccountModalOpen(false)}
+        address={btcUserWallet?.address || ""}
+        onDisconnect={() => {
+          localStorage.removeItem("btcPrivateKey");
+          setBtcUserWallet(null);
+          setIsBtcAccountModalOpen(false);
+        }}
       />
       <StatusModal
         isOpen={isStatusModalOpen}
