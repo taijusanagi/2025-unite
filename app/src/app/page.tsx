@@ -14,7 +14,7 @@ import { config } from "@/lib/config";
 import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal"; // Import the new component
 
-import Sdk from "../../../chains/sdk/evm/cross-chain-sdk-wrapper";
+import Sdk from "@chains/sdk/evm/cross-chain-sdk-wrapper";
 const { Address } = Sdk;
 
 export default function Home() {

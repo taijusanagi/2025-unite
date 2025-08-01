@@ -2,6 +2,7 @@ import 'dotenv/config'
 import {expect, jest} from '@jest/globals'
 
 import Sdk from '../sdk/evm/cross-chain-sdk-wrapper'
+console.log('Sdk', Sdk)
 import {parseUnits, randomBytes} from 'ethers'
 import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 
