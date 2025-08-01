@@ -457,8 +457,6 @@ describe('btc', () => {
                 sha256: bitcoin.crypto.sha256(secret)
             }
 
-            const {data} = bitcoin.address.fromBech32(btcUser.address!)
-
             // use sdk to make order object
             const order = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory),

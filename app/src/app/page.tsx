@@ -24,6 +24,8 @@ import {
 import { patchedDomain, getOrderHashWithPatch } from "@sdk/evm/patch";
 import IWETHContract from "@sdk/evm/contracts/IWETH.json";
 
+import { addressToEthAddressFormat } from "@sdk/btc";
+
 import * as bitcoin from "bitcoinjs-lib";
 import ECPairFactory from "ecpair";
 import * as ecc from "tiny-secp256k1";
@@ -46,8 +48,8 @@ export default function Home() {
     exproler: cfg.explorer,
   }));
 
-  const [fromChain, setFromChain] = useState(chains[0]);
-  const [toChain, setToChain] = useState(chains[1]);
+  const [fromChain, setFromChain] = useState(chains[1]);
+  const [toChain, setToChain] = useState(chains[0]);
   const [amount] = useState(5000);
   const [recipient, setRecipient] = useState(
     "tb1qpswqvqftg892v2sfwq95faryl6rvztkuf2rpf0"
@@ -94,6 +96,20 @@ export default function Home() {
       setIsConnectModalOpen(false);
     }
   }, [evmConnectedAddress, isConnectModalOpen]);
+
+  useEffect(() => {
+    if (connectedWalletType === "btc") {
+      const btcChain = chains.find((c) => c.type === "btc");
+      if (fromChain.type !== "btc" && btcChain) {
+        setFromChain(btcChain);
+      }
+    } else if (connectedWalletType === "evm") {
+      const evmChain = chains.find((c) => c.type === "evm");
+      if (fromChain.type !== "evm" && evmChain) {
+        setFromChain(evmChain);
+      }
+    }
+  }, [connectedWalletType, fromChain, chains]);
 
   // Renamed from handleConnectEVM
   const evmConnectWallet = () => {
@@ -301,9 +317,11 @@ export default function Home() {
       let signature = "";
 
       if (config[dstChainId].type == "btc") {
-        const { data } = bitcoin.address.fromBech32(btcUserWallet!.address);
         // @ts-ignore
-        order.inner.inner.receiver = `0x${data.toString("hex")}`;
+        order.inner.inner.receiver = addressToEthAddressFormat(recipient);
+      }
+
+      if (config[srcChainId].type == "btc") {
       } else {
         const typedData = order.getTypedData(srcChainId);
         signature = await evmsigner!.signTypedData(
@@ -316,7 +334,6 @@ export default function Home() {
           typedData.message
         );
       }
-
       updateLastStatus("done");
 
       // 4. Submit order
@@ -408,8 +425,6 @@ export default function Home() {
       addFinalStatus(error.message || "An unknown error occurred", "failed");
     }
   };
-
-  const isWalletConnected = evmsigner || btcUserWallet;
 
   return (
     <>
@@ -515,20 +530,37 @@ export default function Home() {
                   <select
                     className="flex-1 px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-blue-500 cursor-pointer"
                     value={fromChain.chainId}
-                    onChange={(e) =>
-                      setFromChain(
-                        chains.find(
-                          (c) => c.chainId === Number(e.target.value)
-                        )!
-                      )
-                    }
+                    onChange={(e) => {
+                      const selected = chains.find(
+                        (c) => c.chainId === Number(e.target.value)
+                      );
+                      if (
+                        (connectedWalletType === "btc" &&
+                          selected?.type !== "btc") ||
+                        (connectedWalletType === "evm" &&
+                          selected?.type !== "evm")
+                      ) {
+                        return; // Do nothing if the selected chain is not compatible
+                      }
+                      setFromChain(selected!);
+                    }}
                   >
                     {chains.map((chain) => (
-                      <option key={chain.chainId} value={chain.chainId}>
+                      <option
+                        key={chain.chainId}
+                        value={chain.chainId}
+                        disabled={
+                          (connectedWalletType === "btc" &&
+                            chain.type !== "btc") ||
+                          (connectedWalletType === "evm" &&
+                            chain.type !== "evm")
+                        }
+                      >
                         {chain.name} ({chain.symbol})
                       </option>
                     ))}
                   </select>
+
                   <input
                     type="text"
                     value={amount}
@@ -537,8 +569,8 @@ export default function Home() {
                   />
                 </div>
                 <p className="text-xs text-blue-200 mt-1">
-                  * Amount is fixed to 10000 {fromChain.unit} to keep the demo
-                  easier.
+                  * Amount is fixed to {amount} {fromChain.unit} to keep the
+                  demo easier.
                 </p>
               </div>
 
@@ -571,8 +603,7 @@ export default function Home() {
                   />
                 </div>
                 <p className="text-xs text-blue-200 mt-1">
-                  * You will receive the same amount in {toChain.unit}. Price
-                  oracle is disabled to keep the demo easier.
+                  * You will receive the same amount in {toChain.unit}.
                 </p>
               </div>
 
@@ -588,6 +619,9 @@ export default function Home() {
                     placeholder="Bitcoin Testnet address (e.g., tb1...)"
                     className="w-full px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-cyan-500"
                   />
+                  <p className="text-xs text-blue-200 mt-1">
+                    * A dummy recipient is used as default to simplify the demo
+                  </p>
                 </div>
               )}
 
