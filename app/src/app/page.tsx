@@ -270,12 +270,6 @@ export default function Home() {
 
   return (
     <>
-      <StatusModal
-        isOpen={isStatusModalOpen}
-        onClose={() => setIsStatusModalOpen(false)}
-        statuses={statuses}
-        title="Swap in Progress..."
-      />
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
         {/* Your existing JSX for header, hero, dex, etc. remains here */}
         {/* ... */}
@@ -453,61 +447,72 @@ export default function Home() {
             <FaGithub className="w-5 h-5" />
           </a>
         </footer>
-
-        {showConnectModal && (
+      </div>
+      {showConnectModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 cursor-pointer"
+          onClick={() => setShowConnectModal(false)}
+        >
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 cursor-pointer"
-            onClick={() => setShowConnectModal(false)}
+            className="bg-gray-900 p-6 rounded-xl w-96 text-white space-y-6 relative cursor-default"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="bg-gray-900 p-6 rounded-xl w-96 text-white space-y-6 relative cursor-default"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* Section 1: Chain Abstraction */}
-              <div className="space-y-3 border-b border-gray-700 pb-4">
-                <h3 className="text-lg font-semibold text-center text-gray-300">
-                  Try Chain Abstraction
-                </h3>
-                <button
-                  onClick={() => {}}
-                  className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
-                >
-                  Gattai Wallet
-                </button>
-              </div>
-
-              {/* Section 2: Specific Wallet Connect */}
-              <div className="space-y-3">
-                <h3 className="text-lg font-semibold text-center text-gray-300">
-                  Connect Wallet on Specific Chain
-                </h3>
-
-                <button
-                  onClick={openConnectModal}
-                  className="w-full py-2 bg-blue-600 rounded-md hover:bg-blue-700 transition cursor-pointer font-semibold"
-                >
-                  EVM Wallet
-                </button>
-
-                <button
-                  onClick={() => {}}
-                  className="w-full py-2 bg-yellow-600 rounded-md hover:bg-yellow-700 transition cursor-pointer font-semibold"
-                >
-                  BTC Wallet
-                </button>
-              </div>
-
-              {/* Close Button */}
+            {/* Section 1: Chain Abstraction */}
+            <div className="space-y-3 border-b border-gray-700 pb-4">
+              <h3 className="text-lg font-semibold text-center text-gray-300">
+                Try Chain Abstraction
+              </h3>
               <button
-                onClick={() => setShowConnectModal(false)}
-                className="absolute top-2 right-3 text-gray-400 hover:text-white text-xl cursor-pointer"
+                onClick={() => {}}
+                className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
               >
-                &times;
+                Gattai Wallet
               </button>
             </div>
+
+            {/* Section 2: Specific Wallet Connect */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-center text-gray-300">
+                Connect Wallet on Specific Chain
+              </h3>
+
+              <button
+                onClick={openConnectModal}
+                className="w-full py-2 bg-blue-600 rounded-md hover:bg-blue-700 transition cursor-pointer font-semibold"
+              >
+                EVM Wallet
+              </button>
+
+              <button
+                onClick={() => {}}
+                className="w-full py-2 bg-yellow-600 rounded-md hover:bg-yellow-700 transition cursor-pointer font-semibold"
+              >
+                BTC Wallet
+              </button>
+            </div>
+
+            {/* Close Button */}
+            <button
+              onClick={() => setShowConnectModal(false)}
+              className="absolute top-2 right-3 text-gray-400 hover:text-white text-xl cursor-pointer"
+            >
+              &times;
+            </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      <StatusModal
+        isOpen={isStatusModalOpen}
+        onClose={() => setIsStatusModalOpen(false)}
+        statuses={statuses}
+        title="Swap in Progress..."
+        fromChainName={fromChain.name}
+        toChainName={toChain.name}
+        fromAmount={amount.toString()}
+        toAmount={amount.toString()}
+        fromSymbol={fromChain.symbol}
+        toSymbol={toChain.symbol}
+      />
     </>
   );
 }

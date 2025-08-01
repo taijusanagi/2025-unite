@@ -4,7 +4,6 @@ import React, { useEffect, useRef } from "react";
 
 export type StatusState = "loading" | "done" | "failed" | "idle";
 
-// The Status interface now includes an optional explorerUrl
 export interface Status {
   text: string;
   state: StatusState;
@@ -16,11 +15,18 @@ interface StatusModalProps {
   onClose: () => void;
   statuses: Status[];
   title: string;
+  // New props for swap information
+  fromChainName: string;
+  toChainName: string;
+  fromAmount: string;
+  toAmount: string;
+  fromSymbol: string;
+  toSymbol: string;
 }
 
 const StatusIcon = ({ state }: { state: StatusState }) => {
   const baseClasses =
-    "w-6 h-6 rounded-full flex items-center justify-center z-10";
+    "w-6 h-6 rounded-full flex items-center justify-center z-10 flex-shrink-0";
   switch (state) {
     case "loading":
       return (
@@ -50,11 +56,16 @@ const StatusModal: React.FC<StatusModalProps> = ({
   onClose,
   statuses,
   title,
+  fromChainName,
+  toChainName,
+  fromAmount,
+  toAmount,
+  fromSymbol,
+  toSymbol,
 }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Auto-scroll to the bottom when statuses change
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
@@ -67,7 +78,7 @@ const StatusModal: React.FC<StatusModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-70 backdrop-blur-sm">
       <div className="bg-gray-800 border border-blue-900/50 rounded-lg shadow-xl w-full max-w-md p-6 m-4 flex flex-col">
-        <div className="flex justify-between items-center mb-4">
+        <div className="flex justify-between items-center">
           <h2 className="text-xl font-semibold text-white">{title}</h2>
           {isComplete && (
             <button
@@ -78,20 +89,53 @@ const StatusModal: React.FC<StatusModalProps> = ({
             </button>
           )}
         </div>
+
+        {/* Swap Information Section */}
+        <div className="my-4 p-4 bg-gray-900/50 rounded-lg border border-gray-700">
+          <div className="flex items-center justify-between text-sm">
+            <div className="text-left">
+              <p className="text-gray-400">From</p>
+              <p className="font-semibold text-lg text-white">
+                {fromAmount} {fromSymbol}
+              </p>
+              <p className="text-gray-400 text-xs">{fromChainName}</p>
+            </div>
+            <div className="text-gray-500 text-2xl font-light mx-2 self-center">
+              →
+            </div>
+            <div className="text-right">
+              <p className="text-gray-400">To</p>
+              <p className="font-semibold text-lg text-white">
+                {toAmount} {toSymbol}
+              </p>
+              <p className="text-gray-400 text-xs">{toChainName}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Explanatory Note */}
+        <div className="mb-4 p-3 bg-blue-900/20 text-blue-200 text-xs rounded-lg flex items-start gap-2">
+          <span className="mt-0.5">ℹ️</span>
+          <p>
+            Please keep this browser window open. The final step requires
+            sharing a secret from this session after the transaction achieves
+            finality.
+          </p>
+        </div>
+
+        {/* Status Timeline */}
         <div
           ref={scrollRef}
-          className="space-y-1 max-h-[60vh] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900 pr-3 -mr-3"
+          className="space-y-1 max-h-[40vh] overflow-y-auto pr-3 -mr-3 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900"
         >
           {statuses.map((status, index) => (
             <div key={index} className="flex">
-              {/* Timeline Graphic */}
               <div className="flex flex-col items-center mr-4">
                 <StatusIcon state={status.state} />
                 {index < statuses.length - 1 && (
                   <div className="w-px flex-grow bg-gray-600" />
                 )}
               </div>
-              {/* Status Text and Link */}
               <div className="pb-6 pt-0.5">
                 <p className="text-gray-200">{status.text}</p>
                 {status.explorerUrl && (
@@ -108,8 +152,9 @@ const StatusModal: React.FC<StatusModalProps> = ({
             </div>
           ))}
         </div>
+
         {isComplete && (
-          <div className="mt-6 text-center border-t border-gray-700 pt-4">
+          <div className="mt-4 text-center border-t border-gray-700 pt-4">
             <button
               onClick={onClose}
               className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold"
