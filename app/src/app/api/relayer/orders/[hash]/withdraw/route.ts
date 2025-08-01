@@ -4,7 +4,7 @@ import { connectRedis } from "@/lib/redis";
 import redis from "@/lib/redis";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   context: { params: Promise<{ hash: string }> }
 ) {
   try {
@@ -12,6 +12,8 @@ export async function POST(
     if (!hash) {
       return NextResponse.json({ error: "Missing hash" }, { status: 400 });
     }
+
+    const { srcWithdrawHash, dstWithdrawHash } = await req.json();
 
     await connectRedis();
 
@@ -24,6 +26,8 @@ export async function POST(
 
     const updated = {
       ...order,
+      srcWithdrawHash,
+      dstWithdrawHash,
       status: "withdraw_completed",
     };
 

@@ -21,9 +21,22 @@ export async function GET(
     }
 
     const parsed = JSON.parse(data);
-    const status = parsed.status;
+    const {
+      status,
+      srcWithdrawTxHash,
+      dstWithdrawTxHash,
+      srcDeployHash,
+      dstDeployHash,
+    } = parsed;
 
-    return NextResponse.json({ hash, status });
+    return NextResponse.json({
+      hash,
+      status,
+      srcWithdrawTxHash,
+      dstWithdrawTxHash,
+      srcDeployHash,
+      dstDeployHash,
+    });
   } catch (err) {
     console.error("Error fetching order status:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

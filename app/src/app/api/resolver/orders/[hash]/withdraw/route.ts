@@ -49,13 +49,13 @@ export async function POST(
     );
 
     console.log("Withdrawing from destination escrow...");
-    await srcResolverWallet.send(
+    const { txHash: srcWithdrawHash } = await srcResolverWallet.send(
       resolver.withdraw("dst", dstEscrowAddress, secret, dstImmutables)
     );
     console.log("Withdrawal from destination complete.");
 
     console.log("Withdrawing from source escrow...");
-    await srcResolverWallet.send(
+    const { txHash: dstWithdrawHash } = await srcResolverWallet.send(
       resolver.withdraw("src", srcEscrowAddress, secret, srcImmutables)
     );
     console.log("Withdrawal from source complete.");
@@ -63,6 +63,10 @@ export async function POST(
     fetch(`${process.env.APP_URL}/api/relayer/orders/${hash}/withdraw`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        srcWithdrawHash,
+        dstWithdrawHash,
+      }),
     });
 
     return NextResponse.json({ success: true });

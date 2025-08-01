@@ -63,7 +63,11 @@ export async function POST(
 
     const fillAmount = order.makingAmount;
     console.log("Deploying source escrow contract...");
-    const { blockHash: srcDeployBlock } = await srcResolverWallet.send(
+    const {
+      txHash: srcDeployHash,
+      blockHash: srcDeployBlock,
+      blockTimestamp: srcDeployedAt,
+    } = await srcResolverWallet.send(
       resolver.deploySrc(
         srcChainId,
         order,
@@ -75,7 +79,9 @@ export async function POST(
         fillAmount
       )
     );
-    console.log(`Source deployed at block hash: ${srcDeployBlock}`);
+    console.log(
+      `Source deployed at block hash: ${srcDeployHash}, timestamp: ${srcDeployedAt}`
+    );
 
     console.log("Fetching source deployment event...");
     const srcEvent = await srcEscrowFactory.getSrcDeployEvent(srcDeployBlock);
@@ -87,11 +93,11 @@ export async function POST(
       .withTaker(new Address(resolver.dstAddress));
 
     console.log("Deploying destination escrow contract...");
-    const { blockTimestamp: dstDeployedAt } = await dstResolverWallet.send(
-      resolver.deployDst(dstImmutables)
+    const { txHash: dstDeployHash, blockTimestamp: dstDeployedAt } =
+      await dstResolverWallet.send(resolver.deployDst(dstImmutables));
+    console.log(
+      `Destination deployed at block hash: ${srcDeployHash}, timestamp: ${dstDeployedAt}`
     );
-    console.log(`Destination deployed at timestamp: ${dstDeployedAt}`);
-
     console.log("Calculating destination escrow address...");
     const dstEscrowAddress = new Sdk.EscrowFactory(
       new Address(config[dstChainId].escrowFactory)
@@ -116,10 +122,12 @@ export async function POST(
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        dstEscrowAddress: dstEscrowAddress.toString(),
         srcEscrowAddress: srcEscrowAddress.toString(),
-        dstImmutables: dstImmutables.withDeployedAt(dstDeployedAt).build(),
+        dstEscrowAddress: dstEscrowAddress.toString(),
         srcImmutables: srcEvent[0].build(),
+        dstImmutables: dstImmutables.withDeployedAt(dstDeployedAt).build(),
+        srcDeployHash,
+        dstDeployHash,
       }),
     });
 

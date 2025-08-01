@@ -13,8 +13,14 @@ export async function POST(
       return NextResponse.json({ error: "Missing hash" }, { status: 400 });
     }
 
-    const { dstEscrowAddress, srcEscrowAddress, dstImmutables, srcImmutables } =
-      await req.json();
+    const {
+      dstEscrowAddress,
+      srcEscrowAddress,
+      dstImmutables,
+      srcImmutables,
+      srcDeployHash,
+      dstDeployHash,
+    } = await req.json();
 
     await connectRedis();
 
@@ -32,6 +38,8 @@ export async function POST(
       srcEscrowAddress,
       dstImmutables,
       srcImmutables,
+      srcDeployHash,
+      dstDeployHash,
     };
 
     await redis.hSet("orders", hash, JSON.stringify(updated));

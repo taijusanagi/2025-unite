@@ -220,8 +220,6 @@ export default function Home() {
         ),
       });
 
-      console.log("res", res);
-
       if (!res.ok) throw new Error("Failed to submit order");
       updateLastStatus("done");
 
