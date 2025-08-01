@@ -71,10 +71,7 @@ describe('btc', () => {
 
     beforeAll(async () => {
         console.log('🚀 Set up EVM...')
-        ;[evm] = await Promise.all([
-            initChain(evmChainId, evmOwnerPk, evmResolverPk),
-            initChain(evmChainId, evmOwnerPk, evmResolverPk)
-        ])
+        ;[evm] = await Promise.all([initChain(evmChainId, evmOwnerPk, evmResolverPk)])
 
         evmTimestamp = BigInt((await evm.provider.getBlock('latest'))!.timestamp)
 
@@ -128,13 +125,15 @@ describe('btc', () => {
         console.log('✅ Bitcoin regtest ready.')
     })
 
-    afterAll(() => {
+    afterAll(async () => {
         try {
             console.log('🧹 Stopping Esplora Docker container...')
             execSync('docker stop esplora', {stdio: 'inherit'})
         } catch (err) {
             console.warn('⚠️ Could not stop esplora container — it may have already stopped.')
         }
+        evm.provider.destroy()
+        await evm.node?.stop()
     })
 
     describe('evm -> btc', () => {
