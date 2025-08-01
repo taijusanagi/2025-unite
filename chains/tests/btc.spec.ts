@@ -212,6 +212,8 @@ describe('btc', () => {
             // @ts-ignore
             order.inner.fusionExtension.dstChainId = btcChainId
 
+            console.log('order.build()', order.build())
+
             const signature = await evmUser.signOrder(evmChainId, order, evm.lop)
 
             const orderHash = getOrderHashWithPatch(evmChainId, order, {...patchedDomain, verifyingContract: evm.lop})
@@ -239,11 +241,13 @@ describe('btc', () => {
 
             const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
 
+            console.log('eth - srcEscrowEvent', srcEscrowEvent)
+
             const dstImmutables = srcEscrowEvent[0]
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
 
-            console.log('debug:', dstImmutables)
+            console.log('eth - dstImmutables:', dstImmutables)
 
             const rebuiltAddress = bitcoin.address.toBech32(
                 Buffer.from(dstImmutables.maker.toString().slice(2), 'hex'),
@@ -465,12 +469,14 @@ describe('btc', () => {
                 sha256: bitcoin.crypto.sha256(secret)
             }
 
+            const {data} = bitcoin.address.fromBech32(btcUserAddress!)
+
             // use sdk to make order object
             const order = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory),
                 {
                     salt: Sdk.randBigInt(1000n),
-                    maker: new Address(nullAddress), // this is dummy now
+                    maker: new Address(`0x${bitcoin.address.fromBech32(btcUserAddress!).data.toString('hex')}`),
                     makingAmount: 10000n,
                     takingAmount: 9999n,
                     makerAsset: new Address(evm.trueERC20), // ths is dummy now
@@ -480,13 +486,13 @@ describe('btc', () => {
                 {
                     hashLock: hashLock.keccak256,
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 512n, // about 1 blocks, must be 512, 1024...
-                        srcPublicWithdrawal: 1023n, // not used
-                        srcCancellation: 1024n, // about 2 blocks, must be 512, 1024...
-                        srcPublicCancellation: 1025n, // not used
+                        srcWithdrawal: 512n, // about 1 blocks, must be 512, 1024, 1536...
+                        srcPublicWithdrawal: 1535n, // not used
+                        srcCancellation: 1536n, // about 2 blocks, must be 512, 1024, 1536...
+                        srcPublicCancellation: 1537n, // not used
                         dstWithdrawal: 512n, // adjust with btc
-                        dstPublicWithdrawal: 522n, // 100sec private withdrawal
-                        dstCancellation: 523n // 1sec public withdrawal
+                        dstPublicWithdrawal: 1024n, // 100sec private withdrawal
+                        dstCancellation: 1025n // 1sec public withdrawal
                     }),
                     srcChainId: dummyBtcChainId,
                     dstChainId: evmChainId,
@@ -515,9 +521,6 @@ describe('btc', () => {
                 }
             )
 
-            const {data} = bitcoin.address.fromBech32(btcUserAddress!)
-            // @ts-ignore
-            order.inner.inner.maker = new Address(`0x${data.toString('hex')}`)
             // @ts-ignore
             order.inner.fusionExtension.srcChainId = btcChainId
 
@@ -709,19 +712,30 @@ describe('btc', () => {
 
             console.log('order.maker', order.maker)
 
-            const dstImmutables = Sdk.Immutables.new({
-                orderHash: orderHash,
-                hashLock: hashLock.keccak256,
-                maker: order.maker,
-                taker: new Sdk.Address(await evmResolverContract.getAddress()),
-                token: new Address(evm.weth),
-                amount: order.takingAmount,
-                // @ts-ignore
-                safetyDeposit: order.inner.fusionExtension.dstSafetyDeposit,
-                timeLocks: Sdk.TimeLocks.fromBigInt(setDeployedAt(timeLocks.build(), confirmedTime))
-            })
+            const srcEscrowEvent = [
+                Sdk.Immutables.new({
+                    orderHash: orderHash,
+                    hashLock: hashLock.keccak256,
+                    maker: order.maker,
+                    taker: new Address(`0x${bitcoin.address.fromBech32(btcResolverAddress!).data.toString('hex')}`),
+                    token: order.makerAsset,
+                    amount: order.makingAmount,
+                    // @ts-ignore
+                    safetyDeposit: order.inner.fusionExtension.srcSafetyDeposit,
+                    timeLocks: Sdk.TimeLocks.fromBigInt(setDeployedAt(timeLocks.build(), confirmedTime))
+                }),
+                Sdk.DstImmutablesComplement.new({
+                    maker: order.receiver,
+                    amount: order.takingAmount,
+                    token: new Address(evm.weth),
+                    // @ts-ignore
+                    safetyDeposit: order.inner.fusionExtension.dstSafetyDeposit
+                })
+            ] as [Sdk.Immutables, Sdk.DstImmutablesComplement]
 
-            console.log('dstImmutables', dstImmutables)
+            const dstImmutables = srcEscrowEvent[0]
+                .withComplement(srcEscrowEvent[1])
+                .withTaker(new Sdk.Address(await evmResolverContract.getAddress()))
 
             const resolverContract = new Resolver(evm.resolver, evm.resolver)
             console.log(`[${evmChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
@@ -744,8 +758,28 @@ describe('btc', () => {
             execSync('sleep 2')
 
             // check finality
-
             await verifyHTLCScriptHashFromTx(txid, htlcScript)
+            const ESCROW_DST_IMPLEMENTATION = await evmFactory.getDestinationImpl()
+            const dstEscrowAddress = new Sdk.EscrowFactory(new Address(evm.escrowFactory)).getDstEscrowAddress(
+                srcEscrowEvent[0],
+                srcEscrowEvent[1],
+                dstDeployedAt,
+                new Address(resolverContract.dstAddress),
+                ESCROW_DST_IMPLEMENTATION
+            )
+
+            console.log(`[${evmChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
+
+            await increaseTime([evm], 1000)
+
+            await evmResolver.send(
+                resolverContract.withdraw(
+                    'dst',
+                    dstEscrowAddress,
+                    uint8ArrayToHex(secret),
+                    dstImmutables.withDeployedAt(dstDeployedAt)
+                )
+            )
 
             // ========================================
             // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
