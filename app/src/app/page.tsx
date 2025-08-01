@@ -12,11 +12,11 @@ import IWETHContract from "@/lib/contracts/IWETH.json";
 import { useAccount, useChainId } from "wagmi";
 import { Address } from "@1inch/cross-chain-sdk";
 import { config } from "@/lib/config";
-import StatusModal, { Status, StatusState } from "@/components/StatusModal"; // Make sure the path is correct
+import StatusModal, { Status, StatusState } from "@/components/StatusModal";
+import ConnectModal from "@/components/ConnectModal"; // Import the new component
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
-  const [showConnectModal, setShowConnectModal] = useState(false);
   const { openConnectModal } = useConnectModal();
   const coins = ["/coins/monad.png", "/coins/btc.png"];
   const chains = [
@@ -38,19 +38,30 @@ export default function Home() {
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
 
-  // State for the status modal
+  // State for the modals
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [statuses, setStatuses] = useState<Status[]>([]);
 
   useEffect(() => {
-    if (evmConnectedAddress && showConnectModal) {
-      setShowConnectModal(false);
+    // Close the connect modal automatically if a wallet connects
+    if (evmConnectedAddress && isConnectModalOpen) {
+      setIsConnectModalOpen(false);
     }
-  }, [evmConnectedAddress, showConnectModal]);
+  }, [evmConnectedAddress, isConnectModalOpen]);
+
+  // Handler for opening the EVM wallet connect modal
+  const handleConnectEVM = () => {
+    if (openConnectModal) {
+      openConnectModal();
+    }
+  };
 
   const createOrder = async () => {
     if (!signer) {
       alert("Please connect your wallet first.");
+      // Open connect modal if wallet is not connected
+      setIsConnectModalOpen(true);
       return;
     }
     if (connectedChainId !== fromChain.chainId) {
@@ -285,7 +296,7 @@ export default function Home() {
             <ConnectButton chainStatus={"icon"} accountStatus={"avatar"} />
           ) : (
             <button
-              onClick={() => setShowConnectModal(true)}
+              onClick={() => setIsConnectModalOpen(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
             >
               Connect
@@ -448,59 +459,17 @@ export default function Home() {
           </a>
         </footer>
       </div>
-      {showConnectModal && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 cursor-pointer"
-          onClick={() => setShowConnectModal(false)}
-        >
-          <div
-            className="bg-gray-900 p-6 rounded-xl w-96 text-white space-y-6 relative cursor-default"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Section 1: Chain Abstraction */}
-            <div className="space-y-3 border-b border-gray-700 pb-4">
-              <h3 className="text-lg font-semibold text-center text-gray-300">
-                Try Chain Abstraction
-              </h3>
-              <button
-                onClick={() => {}}
-                className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
-              >
-                Gattai Wallet
-              </button>
-            </div>
 
-            {/* Section 2: Specific Wallet Connect */}
-            <div className="space-y-3">
-              <h3 className="text-lg font-semibold text-center text-gray-300">
-                Connect Wallet on Specific Chain
-              </h3>
-
-              <button
-                onClick={openConnectModal}
-                className="w-full py-2 bg-blue-600 rounded-md hover:bg-blue-700 transition cursor-pointer font-semibold"
-              >
-                EVM Wallet
-              </button>
-
-              <button
-                onClick={() => {}}
-                className="w-full py-2 bg-yellow-600 rounded-md hover:bg-yellow-700 transition cursor-pointer font-semibold"
-              >
-                BTC Wallet
-              </button>
-            </div>
-
-            {/* Close Button */}
-            <button
-              onClick={() => setShowConnectModal(false)}
-              className="absolute top-2 right-3 text-gray-400 hover:text-white text-xl cursor-pointer"
-            >
-              &times;
-            </button>
-          </div>
-        </div>
-      )}
+      {/* MODALS */}
+      <ConnectModal
+        isOpen={isConnectModalOpen}
+        onClose={() => setIsConnectModalOpen(false)}
+        onConnectEVM={handleConnectEVM}
+        onConnectBTC={() => alert("BTC Wallet connection not implemented yet.")}
+        onConnectGattai={() =>
+          alert("Gattai Wallet connection not implemented yet.")
+        }
+      />
       <StatusModal
         isOpen={isStatusModalOpen}
         onClose={() => setIsStatusModalOpen(false)}
