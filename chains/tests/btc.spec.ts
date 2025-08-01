@@ -225,15 +225,14 @@ describe('btc', () => {
             const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmResolver.send(
                 resolverContract.deploySrc(
                     evmChainId,
+                    evm.lop,
                     order,
                     signature,
                     Sdk.TakerTraits.default()
                         .setExtension(order.extension)
                         .setAmountMode(Sdk.AmountMode.maker)
                         .setAmountThreshold(order.takingAmount),
-                    fillAmount,
-                    order.escrowExtension.hashLockInfo,
-                    evm.lop
+                    fillAmount
                 )
             )
             console.log(`[${evmChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)

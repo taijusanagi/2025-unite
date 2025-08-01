@@ -14,7 +14,10 @@ import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal"; // Import the new component
 
 import Sdk from "@sdk/evm/cross-chain-sdk-shims";
+import { dummySrcChainId, dummyDstChainId } from "@sdk/evm/constants";
+import { patchedDomain, getOrderHashWithPatch } from "@sdk/evm/patch";
 import IWETHContract from "@sdk/evm/contracts/IWETH.json";
+import { Wallet } from "@sdk/evm/wallet";
 
 const { Address } = Sdk;
 
@@ -178,10 +181,10 @@ export default function Home() {
             dstPublicWithdrawal: 100n,
             dstCancellation: 101n,
           }),
-          srcChainId,
-          dstChainId,
-          srcSafetyDeposit: parseEther("0.001"),
-          dstSafetyDeposit: parseEther("0.001"),
+          srcChainId: dummySrcChainId,
+          dstChainId: dummyDstChainId,
+          srcSafetyDeposit: 1n,
+          dstSafetyDeposit: 1n,
         },
         {
           auction: new Sdk.AuctionDetails({
@@ -204,9 +207,17 @@ export default function Home() {
           allowMultipleFills: false,
         }
       );
+
+      order.inner.fusionExtension.srcChainId = srcChainId;
+      order.inner.fusionExtension.dstChainId = dstChainId;
+      order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20);
+
       const typedData = order.getTypedData(srcChainId);
       const signature = await signer.signTypedData(
-        typedData.domain,
+        {
+          ...patchedDomain,
+          verifyingContract: config[srcChainId].limitOrderProtocol,
+        },
         { Order: typedData.types[typedData.primaryType] },
         typedData.message
       );
@@ -214,7 +225,11 @@ export default function Home() {
 
       // 4. Submit order
       addStatus("Submitting order to relayer");
-      const hash = order.getOrderHash(srcChainId);
+      const hash = getOrderHashWithPatch(srcChainId, order, {
+        ...patchedDomain,
+        verifyingContract: config[srcChainId].limitOrderProtocol,
+      });
+
       const res = await fetch("/api/relayer/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -3,6 +3,7 @@ type ChainConfig = {
   name: string;
   symbol: "ETH" | "MON";
   unit: "wei";
+  trueERC20: string;
   wrappedNative: string;
   limitOrderProtocol: string;
   escrowFactory: string;
@@ -17,6 +18,7 @@ export const config: Record<number, ChainConfig> = {
     name: "Base Sepolia",
     symbol: "ETH",
     unit: "wei",
+    trueERC20: "0x93992AF843537Cf0A07E6638ABbbFB837111C753",
     wrappedNative: "0x1bdd24840e119dc2602dcc587dd182812427a5cc",
     limitOrderProtocol: "0xbC4F8be648a7d7783918E80761857403835111fd",
     escrowFactory: "0x99275358DC3931Bcb10FfDd4DFa6276C38D9a6f0",
@@ -29,6 +31,7 @@ export const config: Record<number, ChainConfig> = {
     name: "Monad Testnet",
     symbol: "MON",
     unit: "wei",
+    trueERC20: "0xf927004F33f26CaA1763BB21454Ef36AA76e1064",
     wrappedNative: "0x760afe86e5de5fa0ee542fc7b7b713e1c5425701",
     limitOrderProtocol: "0x3c63B9da5DA101F36061C9503a06906031D7457c",
     escrowFactory: "0x73e5d195b5cf7eb46de86901ad941986e74921ca",
