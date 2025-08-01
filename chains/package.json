@@ -4,7 +4,7 @@
     "description": "Example of 1inch cross chain resolver",
     "scripts": {
         "postinstall": "patch-package",
-        "test": "forge build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+        "test": "npm run test:evm && npm run test:btc",
         "test:evm": "forge build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js tests/evm.spec.ts",
         "test:btc": "forge build && node --experimental-vm-modules ./node_modules/jest/bin/jest.js tests/btc.spec.ts",
         "lint": "eslint  \"tests/**/*.ts\""

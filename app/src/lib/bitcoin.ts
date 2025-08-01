@@ -28,29 +28,52 @@ const keyPairB: ECPairInterface = ECPair.fromWIF(privKeyB, network);
 const pubKeyA = Buffer.from(keyPairA.publicKey);
 const pubKeyB = Buffer.from(keyPairB.publicKey);
 
-// const userLegacyAddress = bitcoin.payments.p2pkh({
-//   pubkey: pubKeyA,
-//   network,
-// }).address;
+const userLegacyAddress = bitcoin.payments.p2pkh({
+  pubkey: pubKeyA,
+  network,
+}).address;
 const userBech32Address = bitcoin.payments.p2wpkh({
   pubkey: pubKeyA,
   network,
 }).address;
-// const resolverLegacyAddress = bitcoin.payments.p2pkh({
-//   pubkey: pubKeyB,
-//   network,
-// }).address;
+const resolverLegacyAddress = bitcoin.payments.p2pkh({
+  pubkey: pubKeyB,
+  network,
+}).address;
 const resolverBech32Address = bitcoin.payments.p2wpkh({
   pubkey: pubKeyB,
   network,
 }).address;
 
-// console.log("User Address (P2PKH):", userLegacyAddress);
+console.log("User Address (P2PKH):", userLegacyAddress);
 console.log("User Address (Bech32):", userBech32Address);
 console.log("User Private Key (WIF):", privKeyA);
-// console.log("Resolver Address (P2PKH):", resolverLegacyAddress);
+console.log("Resolver Address (P2PKH):", resolverLegacyAddress);
 console.log("Resolver Address (Bech32):", resolverBech32Address);
 console.log("Resolver Private Key (WIF):", privKeyB);
+
+async function fetchWithRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 10,
+  baseDelay = 500
+): Promise<T> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt === maxRetries) {
+        console.error(`❌ Failed after ${maxRetries + 1} attempts.`);
+        throw err;
+      }
+      const delay = Math.pow(2, attempt) * baseDelay;
+      console.warn(
+        `⚠️ Attempt ${attempt + 1} failed. Retrying in ${delay}ms...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw new Error("Unreachable");
+}
 
 interface UTXO {
   txid: string;
@@ -59,7 +82,10 @@ interface UTXO {
 }
 
 async function getUtxos(address: string): Promise<UTXO[]> {
-  const res = await axios.get(`${API_BASE}/address/${address}/utxo`);
+  const res = await fetchWithRetry(() =>
+    axios.get(`${API_BASE}/address/${address}/utxo`)
+  );
+
   return res.data.map((o: any) => ({
     txid: o.txid,
     vout: o.vout,
@@ -77,6 +103,50 @@ async function broadcastTx(txHex: string): Promise<string> {
     headers: { "Content-Type": "text/plain" },
   });
   return res.data;
+}
+
+async function waitForUtxo(
+  address: string,
+  timeoutMs = 10000
+): Promise<UTXO[]> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const utxos = await getUtxos(address);
+    if (utxos.length > 0) return utxos;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`UTXOs not found for ${address} after ${timeoutMs}ms`);
+}
+
+async function waitForTxConfirmation(
+  txid: string,
+  timeoutMs = 300_000
+): Promise<{ confirmedAt: string; blockHeight: number }> {
+  const start = Date.now();
+
+  while (Date.now() - start < timeoutMs) {
+    const txData = await fetchWithRetry(() =>
+      axios.get(`${API_BASE}/tx/${txid}`).then((res) => res.data)
+    );
+
+    const status = txData.status;
+    if (status && status.confirmed) {
+      const confirmedAt = status.block_time;
+      const blockHeight = status.block_height;
+
+      console.log(
+        `✅ TX ${txid} confirmed in block ${blockHeight} at ${confirmedAt}`
+      );
+      return { confirmedAt, blockHeight };
+    }
+
+    console.log(`⏳ Waiting for TX ${txid} confirmation...`);
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+
+  throw new Error(
+    `❌ Transaction ${txid} not confirmed within ${timeoutMs / 1000} seconds.`
+  );
 }
 
 async function sendBitcoin({
@@ -106,7 +176,7 @@ async function sendBitcoin({
     return;
   }
 
-  const fee = 10000;
+  const fee = 2000;
   const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
 
   if (totalInput < amountSats + fee) {
@@ -171,9 +241,10 @@ async function verifyHTLCScriptHashFromTx(
   const scriptHash = bitcoin.crypto.hash160(htlcScript); // HASH160(redeemScript)
 
   // Fetch raw tx and decode
-  const txHex = await axios
-    .get(`${API_BASE}/tx/${txid}/hex`)
-    .then((res) => res.data);
+  const txHex = await fetchWithRetry(() =>
+    axios.get(`${API_BASE}/tx/${txid}/hex`).then((res) => res.data)
+  );
+
   const tx = bitcoin.Transaction.fromHex(txHex);
 
   // Get expected scriptPubKey from known redeem script
@@ -250,8 +321,8 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
     return;
   }
 
-  const amount = 1000000; // Match maker's amount or adjust as needed
-  const fee = 10000;
+  const amount = 5000; // Match maker's amount or adjust as needed
+  const fee = 1000;
   const totalInput = utxos.reduce((sum, u) => sum + u.value, 0);
   const change = totalInput - amount - fee;
 
@@ -301,13 +372,14 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
   console.log("🔗 TXID:", txid);
 
   await verifyHTLCScriptHashFromTx(txid, htlcScript);
+  await waitForTxConfirmation(txid);
 
   // ========================================
   // 2️⃣ PHASE 2: Maker claims BTC using secret
   // ========================================
   console.log("\n🔓 Phase 2: Maker (user) claims HTLC using secret...");
 
-  const htlcUtxos = await getUtxos(p2sh.address!);
+  const htlcUtxos = await waitForUtxo(p2sh.address!);
   if (!htlcUtxos.length) {
     console.error("❌ No UTXOs in HTLC address.");
     return;
@@ -316,8 +388,9 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
   const htlcUtxo = htlcUtxos[0];
   const spendPsbt = new bitcoin.Psbt({ network });
 
-  const rawTxHex = (await axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`))
-    .data;
+  const rawTxHex = await fetchWithRetry(() =>
+    axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`).then((res) => res.data)
+  );
 
   spendPsbt.addInput({
     hash: htlcUtxo.txid,
@@ -326,7 +399,7 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
     redeemScript: htlcScript,
   });
 
-  const redeemFee = 10000;
+  const redeemFee = 1000;
   const redeemValue = htlcUtxo.value - redeemFee;
 
   if (redeemValue <= 0) {
@@ -429,8 +502,8 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     return;
   }
 
-  const amount = 1000000;
-  const fee = 10000;
+  const amount = 5000;
+  const fee = 1000;
   const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
   const change = totalInput - amount - fee;
 
@@ -497,20 +570,19 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   const loaded = JSON.parse(orderJson);
 
   console.log("HTLC address:", loaded.p2shAddress);
-  const htlcUtxos2 = await getUtxos(loaded.p2shAddress);
-  console.log("Found HTLC UTXOs:", htlcUtxos2);
 
   const txid = await broadcastTx(loaded.txHex);
   console.log("✅ HTLC Funding TX Broadcasted:", txid);
 
   await verifyHTLCScriptHashFromTx(txid, htlcScript);
+  await waitForTxConfirmation(txid);
 
   // ========================================
   // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
   // ========================================
   console.log("\n🔓 Phase 3: Resolver redeems HTLC with secret...");
 
-  const htlcUtxos = await getUtxos(loaded.p2shAddress);
+  const htlcUtxos = await waitForUtxo(loaded.p2shAddress);
   if (!htlcUtxos.length) {
     console.error("❌ No UTXOs found at HTLC address.");
     return;
@@ -519,8 +591,9 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   const htlcScriptBuffer = Buffer.from(loaded.htlcScriptHex, "hex");
   const htlcUtxo = htlcUtxos[0];
 
-  const rawTxHex = (await axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`))
-    .data;
+  const rawTxHex = await fetchWithRetry(() =>
+    axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`).then((res) => res.data)
+  );
 
   const spendPsbt = new bitcoin.Psbt({ network });
 
@@ -531,7 +604,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     redeemScript: htlcScriptBuffer,
   });
 
-  const redeemFee = 10000;
+  const redeemFee = 1000;
   const redeemValue = htlcUtxo.value - redeemFee;
 
   if (redeemValue <= 0) {
@@ -599,20 +672,27 @@ async function main() {
 
   const format = (sats: number) => (sats / 1e8).toFixed(8);
 
-  // const userP2PKHBalance = await getBalance(userLegacyAddress!);
+  const userP2PKHBalance = await getBalance(userLegacyAddress!);
   const userP2WPKHBalance = await getBalance(userBech32Address!);
-  // const resolverP2PKHBalance = await getBalance(resolverLegacyAddress!);
+  const resolverP2PKHBalance = await getBalance(resolverLegacyAddress!);
   const resolverP2WPKHBalance = await getBalance(resolverBech32Address!);
   //
-  // console.log(`Balance (User P2PKH): ${format(userP2PKHBalance)} tBTC`);
+  console.log(`Balance (User P2PKH): ${format(userP2PKHBalance)} tBTC`);
   console.log(`Balance (User P2WPKH): ${format(userP2WPKHBalance)} tBTC`);
-  // console.log(`Balance (Resolver P2PKH): ${format(resolverP2PKHBalance)} tBTC`);
+  console.log(`Balance (Resolver P2PKH): ${format(resolverP2PKHBalance)} tBTC`);
   console.log(
     `Balance (Resolver P2WPKH): ${format(resolverP2WPKHBalance)} tBTC`
   );
 
-  await processWhenTakerAssetIsBTC();
-  await processWhenMakerAssetIsBTC();
+  // await processWhenTakerAssetIsBTC();
+  // await processWhenMakerAssetIsBTC();
+
+  // await sendBitcoin({
+  //   fromWIF: privKeyA,
+  //   toAddress: resolverBech32Address!,
+  //   amountSats: 100000,
+  //   fromType: "p2pkh",
+  // });
 }
 
 main().catch(console.error);

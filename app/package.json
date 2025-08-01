@@ -38,6 +38,7 @@
     "eslint-config-next": "15.4.4",
     "patch-package": "^8.0.0",
     "postinstall-postinstall": "^2.1.0",
+    "tailwind-scrollbar": "^4.0.2",
     "tailwindcss": "^4",
     "tsx": "^4.20.3",
     "typescript": "^5"
