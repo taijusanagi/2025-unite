@@ -5,10 +5,10 @@ import redis from "@/lib/redis";
 
 export async function POST(
   req: Request,
-  { params }: { params: { hash: string } }
+  context: { params: Promise<{ hash: string }> }
 ) {
   try {
-    const hash = params.hash;
+    const { hash } = await context.params;
     if (!hash) {
       return NextResponse.json({ error: "Missing hash" }, { status: 400 });
     }
@@ -34,7 +34,7 @@ export async function POST(
       srcImmutables,
     } = JSON.parse(raw);
 
-    fetch(`${process.env.APP_URL}/resolver/orders/${hash}/withdraw`, {
+    fetch(`${process.env.APP_URL}/api/resolver/orders/${hash}/withdraw`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

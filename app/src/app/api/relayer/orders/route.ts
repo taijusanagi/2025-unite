@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     await connectRedis();
     await redis.hSet("orders", hash, JSON.stringify(payload));
 
-    fetch(`${process.env.APP_URL}/resolver/order/${hash}/escrow`, {
+    fetch(`${process.env.APP_URL}/api/resolver/orders/${hash}/escrow`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

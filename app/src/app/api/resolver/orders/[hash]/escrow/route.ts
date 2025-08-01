@@ -12,17 +12,17 @@ import { Address } from "@1inch/cross-chain-sdk";
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 
 export async function POST(
-  req: Request,
-  { params }: { params: { hash: string } }
+  _req: Request,
+  context: { params: Promise<{ hash: string }> }
 ) {
   try {
-    const hash = params.hash;
+    const { hash } = await context.params;
     if (!hash) {
       return NextResponse.json({ error: "Missing hash" }, { status: 400 });
     }
 
     const response = await fetch(
-      `${process.env.APP_URL}/relayer/order/${hash}`
+      `${process.env.APP_URL}/api/relayer/orders/${hash}`
     );
 
     if (!response.ok) {
@@ -110,7 +110,7 @@ export async function POST(
     ).getSrcEscrowAddress(srcEvent[0], await srcEscrowFactory.getSourceImpl());
     console.log(`Source escrow address: ${srcEscrowAddress}`);
 
-    fetch(`${process.env.APP_URL}/relayer/order/${hash}/escrow`, {
+    fetch(`${process.env.APP_URL}/api/relayer/orders/${hash}/escrow`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

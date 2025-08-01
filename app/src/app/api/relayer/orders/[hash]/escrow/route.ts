@@ -5,10 +5,10 @@ import redis from "@/lib/redis";
 
 export async function POST(
   req: Request,
-  { params }: { params: { hash: string } }
+  context: { params: Promise<{ hash: string }> }
 ) {
   try {
-    const hash = params.hash;
+    const { hash } = await context.params;
     if (!hash) {
       return NextResponse.json({ error: "Missing hash" }, { status: 400 });
     }

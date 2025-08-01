@@ -15,7 +15,6 @@ interface StatusModalProps {
   onClose: () => void;
   statuses: Status[];
   title: string;
-  // New props for swap information
   fromChainName: string;
   toChainName: string;
   fromAmount: string;
@@ -137,7 +136,7 @@ const StatusModal: React.FC<StatusModalProps> = ({
                 )}
               </div>
               <div className="pb-6">
-                {status.text.length > 120 ? (
+                {status.text.length > 40 ? (
                   <pre className="text-gray-300 text-xs whitespace-pre-wrap bg-black/20 p-2 rounded-md border border-red-500/30 text-left overflow-x-auto">
                     {(() => {
                       try {

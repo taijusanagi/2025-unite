@@ -3,19 +3,22 @@ import { NextResponse } from "next/server";
 import redis, { connectRedis } from "@/lib/redis";
 
 export async function GET(
-  _: Request,
-  { params }: { params: { hash: string } }
+  _req: Request,
+  context: { params: Promise<{ hash: string }> }
 ) {
   try {
+    const { hash } = await context.params;
+    if (!hash) {
+      return NextResponse.json({ error: "Missing hash" }, { status: 400 });
+    }
     await connectRedis();
-
-    const data = await redis.hGet("orders", params.hash);
+    const data = await redis.hGet("orders", hash);
     if (!data) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     const { ...rest } = JSON.parse(data);
-    return NextResponse.json({ hash: params.hash, ...rest });
+    return NextResponse.json({ hash, ...rest });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

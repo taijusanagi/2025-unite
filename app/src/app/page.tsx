@@ -60,7 +60,6 @@ export default function Home() {
   const createOrder = async () => {
     if (!signer) {
       alert("Please connect your wallet first.");
-      // Open connect modal if wallet is not connected
       setIsConnectModalOpen(true);
       return;
     }
@@ -69,7 +68,6 @@ export default function Home() {
       return;
     }
 
-    // Open modal and prepare status helpers
     setIsStatusModalOpen(true);
     let currentStatuses: Status[] = [];
 
@@ -94,17 +92,17 @@ export default function Home() {
     };
 
     try {
-      // Clear previous statuses
       setStatuses([]);
       const srcChainId = fromChain.chainId;
       const dstChainId = toChain.chainId;
+
       const srcWrappedNativeTokenContract = new Contract(
         config[srcChainId].wrappedNative,
         IWETHContract.abi,
         signer
       );
 
-      // 1. Balance Check
+      // 1. Check balance
       addStatus("Checking token balance");
       const balance = await srcWrappedNativeTokenContract.balanceOf(
         signer.address
@@ -117,12 +115,13 @@ export default function Home() {
           value: amount,
         });
         const receipt = await tx.wait();
-        // Dummy URL, adjust for other chains as needed
-        const url = `https://sepolia.basescan.org/tx/${receipt.hash}`;
-        updateLastStatus("done", url);
+        updateLastStatus(
+          "done",
+          `https://sepolia.basescan.org/tx/${receipt.hash}`
+        );
       }
 
-      // 2. Allowance Check
+      // 2. Check allowance
       addStatus("Checking token allowance");
       const allowance = await srcWrappedNativeTokenContract.allowance(
         signer.address,
@@ -137,13 +136,14 @@ export default function Home() {
           UINT_256_MAX
         );
         const receipt = await tx.wait();
-        const url = `https://sepolia.basescan.org/tx/${receipt.hash}`;
-        updateLastStatus("done", url);
+        updateLastStatus(
+          "done",
+          `https://sepolia.basescan.org/tx/${receipt.hash}`
+        );
       }
 
-      // 3. Sign Order
+      // 3. Sign order
       addStatus("Sign the order in your wallet");
-      // ... Order creation logic ...
       const secret = uint8ArrayToHex(randomBytes(32));
       const timestamp = BigInt(Math.floor(Date.now() / 1000));
       const order = Sdk.CrossChainOrder.new(
@@ -201,10 +201,10 @@ export default function Home() {
       );
       updateLastStatus("done");
 
-      // 4. Share signature
-      addStatus("Sharing signature with relayer");
+      // 4. Submit order
+      addStatus("Submitting order to relayer");
       const hash = order.getOrderHash(srcChainId);
-      const res = await fetch("/relayer", {
+      const res = await fetch("/api/relayer/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
@@ -219,58 +219,43 @@ export default function Home() {
           (_, value) => (typeof value === "bigint" ? value.toString() : value)
         ),
       });
-      if (!res.ok) throw new Error("Failed to share signature with relayer");
+
+      console.log("res", res);
+
+      if (!res.ok) throw new Error("Failed to submit order");
       updateLastStatus("done");
 
-      // 5. Wait for escrows
-      addStatus("Waiting for escrows to be created by resolver");
-      const resolverRes = await fetch("/resolver", {
+      // 5. Wait for escrow_created
+      addStatus("Waiting for escrow creation");
+      while (true) {
+        const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
+        const statusJson = await statusRes.json();
+        if (statusJson.status === "escrow_created") break;
+        await new Promise((r) => setTimeout(r, 3000));
+      }
+      updateLastStatus("done");
+
+      // 6. Submit secret
+      addStatus("Submitting secret");
+      const secretRes = await fetch(`/api/relayer/orders/${hash}/secret`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hash }),
+        body: JSON.stringify({ secret }),
       });
-      const resolverData = await resolverRes.json();
-      if (!resolverRes.ok)
-        throw new Error(`Resolver failed: ${resolverData.error}`);
+      if (!secretRes.ok) throw new Error("Failed to share secret");
       updateLastStatus("done");
 
-      // 6. Wait for finality
-      addStatus("Waiting for on-chain finality");
-      await new Promise((resolve) => setTimeout(resolve, 11000));
+      // 7. Wait for withdraw_completed
+      addStatus("Waiting for withdrawal to complete");
+      while (true) {
+        const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
+        const statusJson = await statusRes.json();
+        if (statusJson.status === "withdraw_completed") break;
+        await new Promise((r) => setTimeout(r, 3000));
+      }
       updateLastStatus("done");
 
-      // 7. Withdrawing
-      addStatus("Withdrawing assets");
-      const {
-        dstEscrowAddress,
-        srcEscrowAddress,
-        dstImmutables,
-        srcImmutables,
-      } = resolverData;
-      const withdrawRes = await fetch("/relayer/withdraw", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          srcChainId,
-          dstChainId,
-          dstEscrowAddress,
-          secret,
-          dstImmutables,
-        }),
-      });
-      if (!withdrawRes.ok)
-        throw new Error("Withdrawal from destination failed");
-
-      const resolverWithSecretRes = await fetch("/resolver", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hash, secret, srcImmutables, srcEscrowAddress }),
-      });
-      if (!resolverWithSecretRes.ok)
-        throw new Error(`Finalizing withdrawal failed`);
-      updateLastStatus("done");
-
-      // 8. Done!
+      // 8. Done
       addFinalStatus("Swap Complete! 🎉", "done");
     } catch (error: any) {
       console.error("An error occurred:", error);

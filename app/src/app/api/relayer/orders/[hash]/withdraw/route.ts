@@ -3,9 +3,12 @@ import { NextResponse } from "next/server";
 import { connectRedis } from "@/lib/redis";
 import redis from "@/lib/redis";
 
-export async function POST({ params }: { params: { hash: string } }) {
+export async function POST(
+  _req: Request,
+  context: { params: Promise<{ hash: string }> }
+) {
   try {
-    const hash = params.hash;
+    const { hash } = await context.params;
     if (!hash) {
       return NextResponse.json({ error: "Missing hash" }, { status: 400 });
     }

@@ -8,9 +8,9 @@ const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { hash: string } }
+  context: { params: Promise<{ hash: string }> }
 ) {
-  const hash = params.hash;
+  const { hash } = await context.params;
   if (!hash) {
     return NextResponse.json({ error: "Missing hash" }, { status: 400 });
   }
@@ -60,7 +60,7 @@ export async function POST(
     );
     console.log("Withdrawal from source complete.");
 
-    fetch(`${process.env.APP_URL}/relayer/orders/${hash}/withdraw`, {
+    fetch(`${process.env.APP_URL}/api/relayer/orders/${hash}/withdraw`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
     });
