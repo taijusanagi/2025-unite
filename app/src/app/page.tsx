@@ -25,15 +25,20 @@ export default function Home() {
   const coins = ["/coins/monad.png", "/coins/btc.png"];
 
   const chains = [
-    { name: "Base Sepolia", symbol: "WETH", chainId: 84532 },
-    { name: "Monad Testnet", symbol: "WMON", chainId: 10143 },
-    { name: "Bitcoin Testnet 3", symbol: "BTC", chainId: 99999 },
+    { name: "Base Sepolia", symbol: "WETH", chainId: 84532, unit: "wei" },
+    { name: "Monad Testnet", symbol: "WMON", chainId: 10143, unit: "wei" },
+    {
+      name: "Bitcoin Testnet 3",
+      symbol: "BTC",
+      chainId: 99999,
+      unit: "satoshi",
+    },
   ];
 
   const [fromChain, setFromChain] = useState(chains[0]);
   const [toChain, setToChain] = useState(chains[1]);
 
-  const [amount, setAmount] = useState("0.001");
+  const [amount, setAmount] = useState(10000);
   const signer = useEthersSigner();
   const connectedChainId = useChainId();
 
@@ -48,14 +53,9 @@ export default function Home() {
       toast.error("Please switch to the from network.");
       return;
     }
-    if (amount == "0") {
-      console.error("Amount cannot be zero");
-      toast.error("Amount must be greater than zero.");
-      return;
-    }
-    if (Number(amount) > 0.001) {
-      console.error("Amount exceeds maximum limit");
-      toast.error("Amount cannot exceed 0.001 for sustainable demo.");
+    if (amount !== 10000) {
+      console.error("Invalid fixed amount");
+      toast.error("Amount must be exactly 10000 wei for demo.");
       return;
     }
 
@@ -406,20 +406,20 @@ export default function Home() {
                 >
                   {chains.map((chain) => (
                     <option key={chain.chainId} value={chain.chainId}>
-                      {chain.name}
+                      {chain.name} ({chain.symbol})
                     </option>
                   ))}
                 </select>
                 <input
-                  type="number"
-                  placeholder="Amount"
+                  type="text"
                   value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className="w-24 px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-blue-500 text-sm"
+                  disabled
+                  className="w-24 px-3 py-2 rounded-md bg-gray-700 text-gray-400 border border-gray-600 text-sm cursor-not-allowed"
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                Token: {fromChain.symbol}
+              <p className="text-xs text-red-400 mt-1">
+                * Amount is fixed to 10000 {fromChain.unit} to keep the demo
+                easier.
               </p>
             </div>
 
@@ -438,7 +438,7 @@ export default function Home() {
                 >
                   {chains.map((chain) => (
                     <option key={chain.chainId} value={chain.chainId}>
-                      {chain.name}
+                      {chain.name} ({chain.symbol})
                     </option>
                   ))}
                 </select>
@@ -449,8 +449,9 @@ export default function Home() {
                   className="w-24 px-3 py-2 rounded-md bg-gray-700 text-gray-400 border border-gray-600 text-sm cursor-not-allowed"
                 />
               </div>
-              <p className="text-xs text-gray-400 mt-1">
-                Token: {toChain.symbol}
+              <p className="text-xs text-red-400 mt-1">
+                * You will receive the same amount in {toChain.unit}. Price
+                oracle is disabled to keep the demo easier.
               </p>
             </div>
 
@@ -502,7 +503,7 @@ export default function Home() {
             {/* Section 2: Specific Wallet Connect */}
             <div className="space-y-3">
               <h3 className="text-lg font-semibold text-center text-gray-300">
-                Connect Wallet on specific chain
+                Connect Wallet on Specific Chain
               </h3>
 
               <button
