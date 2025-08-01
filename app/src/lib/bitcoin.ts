@@ -93,6 +93,18 @@ async function getUtxos(address: string): Promise<UTXO[]> {
   }));
 }
 
+async function getBalance(address: string): Promise<number> {
+  const utxos = await getUtxos(address);
+  return utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
+}
+
+async function broadcastTx(txHex: string): Promise<string> {
+  const res = await axios.post(`${API_BASE}/tx`, txHex, {
+    headers: { "Content-Type": "text/plain" },
+  });
+  return res.data;
+}
+
 async function waitForUtxo(
   address: string,
   timeoutMs = 10000
@@ -106,16 +118,35 @@ async function waitForUtxo(
   throw new Error(`UTXOs not found for ${address} after ${timeoutMs}ms`);
 }
 
-async function getBalance(address: string): Promise<number> {
-  const utxos = await getUtxos(address);
-  return utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
-}
+async function waitForTxConfirmation(
+  txid: string,
+  timeoutMs = 300_000
+): Promise<{ confirmedAt: string; blockHeight: number }> {
+  const start = Date.now();
 
-async function broadcastTx(txHex: string): Promise<string> {
-  const res = await axios.post(`${API_BASE}/tx`, txHex, {
-    headers: { "Content-Type": "text/plain" },
-  });
-  return res.data;
+  while (Date.now() - start < timeoutMs) {
+    const txData = await fetchWithRetry(() =>
+      axios.get(`${API_BASE}/tx/${txid}`).then((res) => res.data)
+    );
+
+    const status = txData.status;
+    if (status && status.confirmed) {
+      const confirmedAt = status.block_time;
+      const blockHeight = status.block_height;
+
+      console.log(
+        `✅ TX ${txid} confirmed in block ${blockHeight} at ${confirmedAt}`
+      );
+      return { confirmedAt, blockHeight };
+    }
+
+    console.log(`⏳ Waiting for TX ${txid} confirmation...`);
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+  }
+
+  throw new Error(
+    `❌ Transaction ${txid} not confirmed within ${timeoutMs / 1000} seconds.`
+  );
 }
 
 async function sendBitcoin({
@@ -341,6 +372,7 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
   console.log("🔗 TXID:", txid);
 
   await verifyHTLCScriptHashFromTx(txid, htlcScript);
+  await waitForTxConfirmation(txid);
 
   // ========================================
   // 2️⃣ PHASE 2: Maker claims BTC using secret
@@ -543,6 +575,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   console.log("✅ HTLC Funding TX Broadcasted:", txid);
 
   await verifyHTLCScriptHashFromTx(txid, htlcScript);
+  await waitForTxConfirmation(txid);
 
   // ========================================
   // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
@@ -652,7 +685,7 @@ async function main() {
   );
 
   // await processWhenTakerAssetIsBTC();
-  // await processWhenMakerAssetIsBTC();
+  await processWhenMakerAssetIsBTC();
 
   // await sendBitcoin({
   //   fromWIF: privKeyA,
