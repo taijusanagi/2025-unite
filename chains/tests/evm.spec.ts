@@ -169,6 +169,7 @@ describe('evm', () => {
             const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmDstResolver.send(
                 resolverContract.deployDst(dstImmutables)
             )
+
             console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
             const ESCROW_SRC_IMPLEMENTATION = await srcFactory.getSourceImpl()
             const ESCROW_DST_IMPLEMENTATION = await dstFactory.getDestinationImpl()
@@ -187,11 +188,16 @@ describe('evm', () => {
             // User shares key after validation of dst escrow deployment
             console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
             await evmDstResolver.send(
-                resolverContract.withdraw('dst', dstEscrowAddress, secret, dstImmutables.withDeployedAt(dstDeployedAt))
+                resolverContract.withdraw(
+                    'dst',
+                    dstEscrowAddress,
+                    secret,
+                    dstImmutables.withDeployedAt(dstDeployedAt).build()
+                )
             )
             console.log(`[${srcChainId}]`, `Withdrawing funds for resolver from ${srcEscrowAddress}`)
             const {txHash: resolverWithdrawHash} = await evmSrcResolver.send(
-                resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
+                resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0].build())
             )
             console.log(
                 `[${srcChainId}]`,

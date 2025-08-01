@@ -428,7 +428,7 @@ export default function Home() {
                     className="w-18 px-3 py-2 rounded-md bg-gray-700 text-gray-400 border border-gray-600 text-sm cursor-not-allowed"
                   />
                 </div>
-                <p className="text-xs text-red-400 mt-1">
+                <p className="text-xs text-blue-200 mt-1">
                   * Amount is fixed to 10000 {fromChain.unit} to keep the demo
                   easier.
                 </p>
@@ -462,7 +462,7 @@ export default function Home() {
                     className="w-18 px-3 py-2 rounded-md bg-gray-700 text-gray-400 border border-gray-600 text-sm cursor-not-allowed"
                   />
                 </div>
-                <p className="text-xs text-red-400 mt-1">
+                <p className="text-xs text-blue-200 mt-1">
                   * You will receive the same amount in {toChain.unit}. Price
                   oracle is disabled to keep the demo easier.
                 </p>
