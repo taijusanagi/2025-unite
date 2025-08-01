@@ -49,7 +49,9 @@ export default function Home() {
   const [fromChain, setFromChain] = useState(chains[0]);
   const [toChain, setToChain] = useState(chains[1]);
   const [amount] = useState(5000);
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState(
+    "tb1qpswqvqftg892v2sfwq95faryl6rvztkuf2rpf0"
+  );
 
   const evmsigner = useEthersSigner();
   const connectedChainId = useChainId();
