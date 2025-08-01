@@ -11,7 +11,8 @@ import { useAccount, useChainId } from "wagmi";
 
 import { config } from "@/lib/config";
 import StatusModal, { Status, StatusState } from "@/components/StatusModal";
-import ConnectModal from "@/components/ConnectModal"; // Import the new component
+import ConnectModal from "@/components/ConnectModal";
+import BtcConnectModal from "@/components/BtcConnectModal"; // Import the new BTC modal
 
 import Sdk from "@sdk/evm/cross-chain-sdk-shims";
 import {
@@ -23,7 +24,10 @@ import { patchedDomain, getOrderHashWithPatch } from "@sdk/evm/patch";
 import IWETHContract from "@sdk/evm/contracts/IWETH.json";
 
 import * as bitcoin from "bitcoinjs-lib";
+import ECPairFactory from "ecpair";
+import * as ecc from "tiny-secp256k1";
 
+const ECPair = ECPairFactory(ecc);
 const { Address } = Sdk;
 
 export default function Home() {
@@ -47,32 +51,92 @@ export default function Home() {
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
 
+  // State for BTC connection
+  const [btcPrivateKey, setBtcPrivateKey] = useState<string | null>(null);
+
   // State for the modals
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
+  const [isBtcConnectModalOpen, setIsBtcConnectModalOpen] = useState(false);
   const [statuses, setStatuses] = useState<Status[]>([]);
 
+  // Check for saved BTC private key on mount
   useEffect(() => {
-    // Close the connect modal automatically if a wallet connects
+    const savedKey = localStorage.getItem("btcTestnetPrivateKey");
+    if (savedKey) {
+      try {
+        // Validate key before setting it
+        const network = bitcoin.networks.testnet;
+        ECPair.fromWIF(savedKey, network);
+        setBtcPrivateKey(savedKey);
+      } catch (error) {
+        console.error("Failed to load/validate BTC private key:", error);
+        localStorage.removeItem("btcTestnetPrivateKey");
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     if (evmConnectedAddress && isConnectModalOpen) {
       setIsConnectModalOpen(false);
     }
   }, [evmConnectedAddress, isConnectModalOpen]);
 
-  // Handler for opening the EVM wallet connect modal
-  const handleConnectEVM = () => {
+  // Renamed from handleConnectEVM
+  const evmConnectWallet = () => {
     if (openConnectModal) {
       openConnectModal();
     }
   };
 
+  // Handler for opening the BTC private key modal
+  const btcConnectWallet = () => {
+    setIsConnectModalOpen(false); // Close the general connect modal
+    setIsBtcConnectModalOpen(true); // Open the specific BTC modal
+  };
+
+  // Handler for saving the BTC private key from the modal
+  const handleBtcConnect = (privateKey: string) => {
+    try {
+      const network = bitcoin.networks.testnet;
+      const keyPair = ECPair.fromWIF(privateKey, network);
+      const { address } = bitcoin.payments.p2wpkh({
+        pubkey: Buffer.from(keyPair.publicKey),
+        network,
+      });
+
+      if (!address) {
+        throw new Error("Could not derive address from private key.");
+      }
+
+      localStorage.setItem("btcTestnetPrivateKey", privateKey);
+      setBtcPrivateKey(privateKey);
+      alert(`BTC Testnet wallet connected successfully! Address: ${address}`);
+      setIsBtcConnectModalOpen(false);
+    } catch (e) {
+      console.error(e);
+      alert(
+        "Invalid Bitcoin Testnet private key (WIF format). Please check and try again."
+      );
+      setBtcPrivateKey(null);
+      localStorage.removeItem("btcTestnetPrivateKey");
+    }
+  };
+
   const createOrder = async () => {
-    if (!signer) {
-      alert("Please connect your wallet first.");
+    // Check for appropriate wallet connection
+    if (fromChain.type === "evm" && !signer) {
+      alert("Please connect your EVM wallet first.");
       setIsConnectModalOpen(true);
       return;
     }
-    if (connectedChainId !== fromChain.chainId) {
+    if (fromChain.type === "btc" && !btcPrivateKey) {
+      alert("Please connect your BTC Testnet wallet first.");
+      btcConnectWallet();
+      return;
+    }
+
+    if (fromChain.type === "evm" && connectedChainId !== fromChain.chainId) {
       alert("Please switch to the 'From' network in your wallet.");
       return;
     }
@@ -115,13 +179,13 @@ export default function Home() {
         const srcWrappedNativeTokenContract = new Contract(
           config[srcChainId].wrappedNative!,
           IWETHContract.abi,
-          signer
+          signer!
         );
 
         // 1. Check balance
         addStatus("Checking token balance");
         const balance = await srcWrappedNativeTokenContract.balanceOf(
-          signer.address
+          signer!.address
         );
         updateLastStatus("done");
 
@@ -142,7 +206,7 @@ export default function Home() {
         // 2. Check allowance
         addStatus("Checking token allowance");
         const allowance = await srcWrappedNativeTokenContract.allowance(
-          signer.address,
+          signer!.address,
           config[srcChainId].limitOrderProtocol
         );
         updateLastStatus("done");
@@ -171,13 +235,13 @@ export default function Home() {
         new Address(config[srcChainId].escrowFactory),
         {
           salt: Sdk.randBigInt(1000n),
-          maker: new Address(signer.address),
+          maker: new Address(signer!.address),
           makingAmount: BigInt(amount),
           takingAmount: BigInt(amount),
-          makerAsset: new Address(config[srcChainId].wrappedNative),
+          makerAsset: new Address(config[srcChainId].wrappedNative!),
           takerAsset:
             config[dstChainId].type === "evm"
-              ? new Address(config[dstChainId].wrappedNative)
+              ? new Address(config[dstChainId].wrappedNative!)
               : new Address(nativeTokenAddress),
         },
         {
@@ -205,7 +269,7 @@ export default function Home() {
           }),
           whitelist: [
             {
-              address: new Address(config[srcChainId].resolver),
+              address: new Address(config[srcChainId].resolver!),
               allowFrom: 0n,
             },
           ],
@@ -220,7 +284,7 @@ export default function Home() {
 
       order.inner.fusionExtension.srcChainId = srcChainId;
       order.inner.fusionExtension.dstChainId = dstChainId;
-      order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20);
+      order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20!);
 
       if (config[dstChainId].type == "btc") {
         const { data } = bitcoin.address.fromBech32(
@@ -231,7 +295,7 @@ export default function Home() {
       }
 
       const typedData = order.getTypedData(srcChainId);
-      const signature = await signer.signTypedData(
+      const signature = await signer!.signTypedData(
         {
           chainId: srcChainId,
           ...patchedDomain,
@@ -246,7 +310,7 @@ export default function Home() {
       addStatus("Submitting order to relayer");
       const hash = getOrderHashWithPatch(srcChainId, order, {
         ...patchedDomain,
-        verifyingContract: config[srcChainId].limitOrderProtocol,
+        verifyingContract: config[srcChainId].limitOrderProtocol!,
       });
 
       const res = await fetch("/api/relayer/orders", {
@@ -329,12 +393,12 @@ export default function Home() {
     }
   };
 
+  const isWalletConnected = evmConnectedAddress || btcPrivateKey;
+
   return (
     <>
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
-        {/* Your existing JSX for header, hero, dex, etc. remains here */}
-        {/* ... */}
-        {/* 1. Header (Always Visible) */}
+        {/* Header */}
         <div className="flex justify-between items-center px-6 py-4">
           <div
             className="text-2xl font-bold text-blue-400 cursor-pointer"
@@ -342,7 +406,7 @@ export default function Home() {
           >
             GattaiSwap
           </div>
-          {evmConnectedAddress ? (
+          {isWalletConnected ? (
             <ConnectButton chainStatus={"icon"} accountStatus={"avatar"} />
           ) : (
             <button
@@ -514,11 +578,16 @@ export default function Home() {
       <ConnectModal
         isOpen={isConnectModalOpen}
         onClose={() => setIsConnectModalOpen(false)}
-        onConnectEVM={handleConnectEVM}
-        onConnectBTC={() => alert("BTC Wallet connection not implemented yet.")}
+        onConnectEVM={evmConnectWallet}
+        onConnectBTC={btcConnectWallet}
         onConnectGattai={() =>
           alert("Gattai Wallet connection not implemented yet.")
         }
+      />
+      <BtcConnectModal
+        isOpen={isBtcConnectModalOpen}
+        onClose={() => setIsBtcConnectModalOpen(false)}
+        onConnect={handleBtcConnect}
       />
       <StatusModal
         isOpen={isStatusModalOpen}
