@@ -29,7 +29,7 @@ export async function GET(req: NextRequest) {
 
     try {
       console.log(`[${label}] Initializing provider and wallet...`);
-      const provider = new JsonRpcProvider(chain.url);
+      const provider = new JsonRpcProvider(chain.rpc);
       const wallet = new Wallet(privateKey, provider);
 
       const WETH = new Contract(chain.wrappedNative, IWETHContract.abi, wallet);

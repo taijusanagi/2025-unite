@@ -5,15 +5,17 @@ import { FaGithub } from "react-icons/fa";
 import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
 import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
-import * as Sdk from "@1inch/cross-chain-sdk";
 import { Contract, parseEther } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
 import IWETHContract from "@/lib/contracts/IWETH.json";
 import { useAccount, useChainId } from "wagmi";
-import { Address } from "@1inch/cross-chain-sdk";
+
 import { config } from "@/lib/config";
 import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal"; // Import the new component
+
+import Sdk from "../../../chains/sdk/evm/cross-chain-sdk-wrapper";
+const { Address } = Sdk;
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
