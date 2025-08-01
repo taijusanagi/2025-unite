@@ -6,7 +6,7 @@ import { Wallet } from "@/lib/wallet";
 import { JsonRpcProvider } from "ethers";
 import { NextRequest, NextResponse } from "next/server";
 
-const privateKey = process.env.PRIVATE_KEY || "0x";
+const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 
 export async function POST(req: NextRequest) {
   try {

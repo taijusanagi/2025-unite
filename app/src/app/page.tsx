@@ -423,7 +423,7 @@ export default function Home() {
                   type="text"
                   value={amount}
                   disabled
-                  className="w-24 px-3 py-2 rounded-md bg-gray-700 text-gray-400 border border-gray-600 text-sm cursor-not-allowed"
+                  className="w-18 px-3 py-2 rounded-md bg-gray-700 text-gray-400 border border-gray-600 text-sm cursor-not-allowed"
                 />
               </div>
               <p className="text-xs text-red-400 mt-1">
@@ -455,7 +455,7 @@ export default function Home() {
                   type="text"
                   disabled
                   value={amount}
-                  className="w-24 px-3 py-2 rounded-md bg-gray-700 text-gray-400 border border-gray-600 text-sm cursor-not-allowed"
+                  className="w-18 px-3 py-2 rounded-md bg-gray-700 text-gray-400 border border-gray-600 text-sm cursor-not-allowed"
                 />
               </div>
               <p className="text-xs text-red-400 mt-1">

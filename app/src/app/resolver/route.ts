@@ -7,7 +7,7 @@ import { Resolver } from "@/lib/resolver";
 import { EscrowFactory } from "@/lib/escrow-factory";
 import { Address } from "@1inch/cross-chain-sdk";
 
-const privateKey = process.env.PRIVATE_KEY || "0x";
+const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 
 export async function POST(req: Request) {
   try {
