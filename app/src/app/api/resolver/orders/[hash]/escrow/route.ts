@@ -4,9 +4,9 @@ import { NextResponse } from "next/server";
 import { JsonRpcProvider } from "ethers";
 import * as Sdk from "@1inch/cross-chain-sdk";
 import { config } from "@/lib/config";
-import { Wallet } from "@/lib/wallet";
-import { Resolver } from "@/lib/resolver";
-import { EscrowFactory } from "@/lib/escrow-factory";
+import { Wallet } from "@sdk/evm/wallet";
+import { Resolver } from "@sdk/evm/resolver";
+import { EscrowFactory } from "@sdk/evm/escrow-factory";
 import { Address } from "@1inch/cross-chain-sdk";
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
@@ -70,6 +70,7 @@ export async function POST(
     } = await srcResolverWallet.send(
       resolver.deploySrc(
         srcChainId,
+        config[srcChainId].limitOrderProtocol,
         order,
         signature,
         Sdk.TakerTraits.default()

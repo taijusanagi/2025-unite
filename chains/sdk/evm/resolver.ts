@@ -13,14 +13,14 @@ export class Resolver {
 
     public deploySrc(
         chainId: number,
+        lop: string,
         //@ts-ignore
         order: Sdk.CrossChainOrder,
         signature: string,
         //@ts-ignore
         takerTraits: Sdk.TakerTraits,
         amount: bigint,
-        hashLock = order.escrowExtension.hashLockInfo,
-        lop: string
+        hashLock = order.escrowExtension.hashLockInfo
     ): TransactionRequest {
         const {r, yParityAndS: vs} = Signature.from(signature)
         const {args, trait} = takerTraits.encode()

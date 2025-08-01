@@ -20,8 +20,9 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@chains/*": ["../chains/*"],
-      "@1inch/cross-chain-sdk": ["./node_modules/@1inch/cross-chain-sdk"]
+      "@sdk/*": ["../chains/sdk/*"],
+      "@1inch/cross-chain-sdk": ["./node_modules/@1inch/cross-chain-sdk"],
+      "ethers": ["./node_modules/ethers"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

@@ -3,8 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { Wallet, Contract, parseEther, JsonRpcProvider } from "ethers";
 import { config } from "@/lib/config";
 
-import IWETHContract from "@/lib/contracts/IWETH.json";
-import ResolverContract from "@/lib/contracts/Resolver.json";
+import IWETHContract from "@sdk/evm/contracts/IWETH.json";
+import ResolverContract from "@sdk/evm/contracts/Resolver.json";
 import { UINT_256_MAX } from "@1inch/byte-utils";
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";

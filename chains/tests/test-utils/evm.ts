@@ -10,8 +10,18 @@ import lopContract from '../../dist/contracts/evm/LimitOrderProtocol.sol/LimitOr
 import factoryContract from '../../dist/contracts/evm/EscrowFactory.sol/EscrowFactory.json'
 import resolverContract from '../../dist/contracts/evm/Resolver.sol/Resolver.json'
 import {Wallet} from '../../sdk/evm/wallet'
-import {Chain} from '../../sdk/evm/types'
+
 const {Address} = Sdk
+
+export type Chain = {
+    node?: any | undefined
+    provider: JsonRpcProvider
+    trueERC20: string
+    weth: string
+    lop: string
+    escrowFactory: string
+    resolver: string
+}
 
 // default addresses
 export const evmOwnerPk = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'

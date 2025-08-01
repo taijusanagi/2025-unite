@@ -1,6 +1,6 @@
 import { config } from "@/lib/config";
-import { Resolver } from "@/lib/resolver";
-import { Wallet } from "@/lib/wallet";
+import { Resolver } from "@sdk/evm//resolver";
+import { Wallet } from "@sdk/evm//wallet";
 import { JsonRpcProvider } from "ethers";
 import { NextRequest, NextResponse } from "next/server";
 

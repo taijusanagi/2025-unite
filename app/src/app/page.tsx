@@ -7,14 +7,15 @@ import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
 import { Contract, parseEther } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
-import IWETHContract from "@/lib/contracts/IWETH.json";
 import { useAccount, useChainId } from "wagmi";
 
 import { config } from "@/lib/config";
 import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal"; // Import the new component
 
-import Sdk from "@chains/sdk/evm/cross-chain-sdk-wrapper";
+import Sdk from "@sdk/evm/cross-chain-sdk-shims";
+import IWETHContract from "@sdk/evm/contracts/IWETH.json";
+
 const { Address } = Sdk;
 
 export default function Home() {

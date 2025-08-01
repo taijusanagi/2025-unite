@@ -147,15 +147,14 @@ describe('evm', () => {
             const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmSrcResolver.send(
                 resolverContract.deploySrc(
                     srcChainId,
+                    evmSrc.lop,
                     order,
                     signature,
                     Sdk.TakerTraits.default()
                         .setExtension(order.extension)
                         .setAmountMode(Sdk.AmountMode.maker)
                         .setAmountThreshold(order.takingAmount),
-                    fillAmount,
-                    order.escrowExtension.hashLockInfo,
-                    evmSrc.lop
+                    fillAmount
                 )
             )
             console.log(`[${srcChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
