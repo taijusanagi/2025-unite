@@ -1,26 +1,27 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FaGithub } from "react-icons/fa";
 
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
 import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
 
 // Force to use the patched version
 import * as Sdk from "@1inch/cross-chain-sdk";
 
-import { Contract, parseEther, parseUnits } from "ethers";
+import { Contract, parseEther } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
 import IWETHContract from "@/lib/contracts/IWETH.json";
 import { toast } from "react-toastify";
-import { useChainId } from "wagmi";
+import { useAccount, useChainId } from "wagmi";
 import { Address } from "@1inch/cross-chain-sdk";
 import { config } from "@/lib/config";
-import { Resolver } from "@/lib/resolver";
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
   const [showConnectModal, setShowConnectModal] = useState(false);
+
+  const { openConnectModal } = useConnectModal();
 
   const coins = ["/coins/monad.png", "/coins/btc.png"];
 
@@ -38,9 +39,16 @@ export default function Home() {
   const [fromChain, setFromChain] = useState(chains[0]);
   const [toChain, setToChain] = useState(chains[1]);
 
-  const [amount, setAmount] = useState(10000);
+  const [amount] = useState(10000);
   const signer = useEthersSigner();
   const connectedChainId = useChainId();
+  const { address: evmConnectedAddress } = useAccount();
+
+  useEffect(() => {
+    if (evmConnectedAddress && showConnectModal) {
+      setShowConnectModal(false);
+    }
+  }, [evmConnectedAddress, showConnectModal]);
 
   const createOrder = async () => {
     if (!signer) {
@@ -84,17 +92,14 @@ export default function Home() {
       signer.address
     );
     console.log("balance", balance.toString());
-    console.log(
-      "balance < parseUnits(amount, 18)",
-      balance < parseUnits(amount, 18)
-    );
+    console.log("balance < parseUnits(amount, 18)", balance < amount);
 
-    if (balance < parseUnits(amount, 18)) {
+    if (balance < amount) {
       console.log("Insufficient balance, depositing...");
       await toast.promise(
         (async () => {
           const tx = await srcWrappedNativeTokenContract.deposit({
-            value: parseUnits(amount, 18),
+            value: amount,
           });
           console.log("Deposit transaction sent:", tx.hash);
           return await tx.wait();
@@ -144,8 +149,8 @@ export default function Home() {
       {
         salt: Sdk.randBigInt(1000n),
         maker: new Address(signer.address),
-        makingAmount: parseUnits(amount, 18),
-        takingAmount: parseUnits(amount, 18),
+        makingAmount: BigInt(amount),
+        takingAmount: BigInt(amount),
         makerAsset: new Address(config[srcChainId].wrappedNative),
         takerAsset: new Address(config[dstChainId].wrappedNative),
       },
@@ -319,12 +324,16 @@ export default function Home() {
         >
           GattaiSwap
         </div>
-        <button
-          onClick={() => setShowConnectModal(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
-        >
-          Connect
-        </button>
+        {evmConnectedAddress ? (
+          <ConnectButton chainStatus={"icon"} accountStatus={"avatar"} />
+        ) : (
+          <button
+            onClick={() => setShowConnectModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
+          >
+            Connect
+          </button>
+        )}
       </div>
 
       {/* 2. Hero */}
@@ -507,7 +516,7 @@ export default function Home() {
               </h3>
 
               <button
-                onClick={() => {}}
+                onClick={openConnectModal}
                 className="w-full py-2 bg-blue-600 rounded-md hover:bg-blue-700 transition cursor-pointer font-semibold"
               >
                 EVM Wallet
