@@ -1,5 +1,3 @@
-// app/api/relayer/withdraw/route.ts
-
 import { config } from "@/lib/config";
 import { Resolver } from "@/lib/resolver";
 import { Wallet } from "@/lib/wallet";
@@ -8,17 +6,33 @@ import { NextRequest, NextResponse } from "next/server";
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 
-export async function POST(req: NextRequest) {
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { hash: string } }
+) {
+  const hash = params.hash;
+  if (!hash) {
+    return NextResponse.json({ error: "Missing hash" }, { status: 400 });
+  }
   try {
-    const { srcChainId, dstChainId, dstEscrowAddress, secret, dstImmutables } =
-      await req.json();
+    const {
+      srcChainId,
+      dstChainId,
+      srcEscrowAddress,
+      dstEscrowAddress,
+      srcImmutables,
+      dstImmutables,
+      secret,
+    } = await req.json();
 
     if (
       !srcChainId ||
       !dstChainId ||
+      !srcEscrowAddress ||
       !dstEscrowAddress ||
-      !secret ||
-      !dstImmutables
+      !srcImmutables ||
+      !dstImmutables ||
+      !secret
     ) {
       return NextResponse.json(
         { error: "Missing required parameters" },
@@ -39,6 +53,17 @@ export async function POST(req: NextRequest) {
       resolver.withdraw("dst", dstEscrowAddress, secret, dstImmutables)
     );
     console.log("Withdrawal from destination complete.");
+
+    console.log("Withdrawing from source escrow...");
+    await srcResolverWallet.send(
+      resolver.withdraw("src", srcEscrowAddress, secret, srcImmutables)
+    );
+    console.log("Withdrawal from source complete.");
+
+    fetch(`${process.env.APP_URL}/relayer/orders/${hash}/withdraw`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
 
     return NextResponse.json({ success: true });
   } catch (error: any) {

@@ -24,12 +24,20 @@ export async function POST(req: Request) {
       order,
       extension,
       signature,
+      status: "order_created",
     };
 
     await connectRedis();
     await redis.hSet("orders", hash, JSON.stringify(payload));
 
-    return NextResponse.json({ hash, message: "Stored successfully" });
+    fetch(`${process.env.APP_URL}/resolver/order/${hash}/escrow`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+
+    return NextResponse.json({ success: true });
   } catch (err) {
     console.error("Redis error:", err);
     return NextResponse.json({ error: "Server error" }, { status: 500 });

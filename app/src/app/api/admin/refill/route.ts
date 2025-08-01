@@ -1,5 +1,5 @@
-// app/api/resolve/route.ts
-import { NextResponse } from "next/server";
+// app/api/admin/refill/route.ts
+import { NextRequest, NextResponse } from "next/server";
 import { Wallet, Contract, parseEther, JsonRpcProvider } from "ethers";
 import { config } from "@/lib/config";
 
@@ -8,8 +8,16 @@ import ResolverContract from "@/lib/contracts/Resolver.json";
 import { UINT_256_MAX } from "@1inch/byte-utils";
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
+const adminPassword = process.env.ADMIN_PASSWORD || "";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url);
+  const password = url.searchParams.get("password");
+
+  if (password !== adminPassword) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const depositAmount = parseEther("0.01");
 
   const results: Record<string, string> = {};

@@ -9,15 +9,6 @@ export async function GET(
   try {
     await connectRedis();
 
-    if (params.hash === "all") {
-      const all = await redis.hGetAll("orders");
-      const parsed = Object.entries(all).map(([hash, json]) => {
-        const { ...rest } = JSON.parse(json);
-        return { hash, ...rest };
-      });
-      return NextResponse.json(parsed);
-    }
-
     const data = await redis.hGet("orders", params.hash);
     if (!data) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
