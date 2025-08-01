@@ -1,19 +1,17 @@
 import 'dotenv/config'
 import {expect, jest} from '@jest/globals'
 
-import Sdk from '../sdk/evm/cross-chain-sdk-wrapper'
-console.log('Sdk', Sdk)
+import Sdk from '../sdk/evm/cross-chain-sdk-shims'
 import {parseUnits, randomBytes} from 'ethers'
 import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 
-import {Wallet} from './lib/evm/wallet'
-import {Resolver} from './lib/evm/resolver'
-import {EscrowFactory} from './lib/evm/escrow-factory'
+import {Wallet} from '../sdk/evm/wallet'
+import {Resolver} from '../sdk/evm/resolver'
+import {EscrowFactory} from '../sdk/evm/escrow-factory'
 
-import {getOrderHashWithPatch, patchedDomain} from './lib/evm/patch'
-import {getBalances, initChain, increaseTime} from './lib/evm/utils'
-import {Chain} from './lib/evm/types'
-import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
+import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
+import {getBalances, initChain, increaseTime, evmOwnerPk, evmResolverPk, evmUserPk} from './test-utils/evm'
+import {Chain} from '../sdk/evm/types'
 
 const {Address} = Sdk
 

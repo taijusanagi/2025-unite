@@ -1,7 +1,7 @@
 import {AbiCoder, Contract, JsonRpcProvider, Signer, TransactionRequest, Wallet as PKWallet} from 'ethers'
-import Sdk from '@1inch/cross-chain-sdk'
-import ERC20 from '../../../dist/contracts/evm/IERC20.sol/IERC20.json'
-import WETH from '../../../dist/contracts/evm/IWETH.sol/IWETH.json'
+import Sdk from './cross-chain-sdk-shims'
+import ERC20 from './contracts/IERC20.json'
+import WETH from './contracts/IWETH.json'
 
 const coder = AbiCoder.defaultAbiCoder()
 
@@ -88,6 +88,7 @@ export class Wallet {
         await tx.wait()
     }
 
+    //@ts-ignore
     public async signOrder(srcChainId: number, order: Sdk.CrossChainOrder, verifyingContract: string): Promise<string> {
         const typedData = order.getTypedData(srcChainId)
 

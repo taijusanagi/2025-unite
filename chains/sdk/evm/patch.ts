@@ -1,4 +1,4 @@
-import Sdk from '@1inch/cross-chain-sdk'
+import Sdk from './cross-chain-sdk-shims'
 import {ethers} from 'ethers'
 
 export const patchedDomain = {
@@ -9,6 +9,7 @@ export const patchedDomain = {
 
 export const getOrderHashWithPatch = (
     chainId: number,
+    //@ts-ignore
     order: Sdk.CrossChainOrder,
     patcheDomain: {name: string; version: string; verifyingContract: string}
 ) => {

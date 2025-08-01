@@ -1,6 +1,6 @@
 import {id, Interface, JsonRpcProvider} from 'ethers'
-import Sdk from '@1inch/cross-chain-sdk'
-import EscrowFactoryContract from '../../../dist/contracts/evm/EscrowFactory.sol/EscrowFactory.json'
+import Sdk from './cross-chain-sdk-shims'
+import EscrowFactoryContract from './contracts/EscrowFactory.json'
 
 export class EscrowFactory {
     private iface = new Interface(EscrowFactoryContract.abi)
@@ -10,6 +10,7 @@ export class EscrowFactory {
         private readonly address: string
     ) {}
 
+    //@ts-ignore
     public async getSourceImpl(): Promise<Sdk.Address> {
         return Sdk.Address.fromBigInt(
             BigInt(
@@ -21,6 +22,7 @@ export class EscrowFactory {
         )
     }
 
+    //@ts-ignore
     public async getDestinationImpl(): Promise<Sdk.Address> {
         return Sdk.Address.fromBigInt(
             BigInt(
@@ -32,6 +34,7 @@ export class EscrowFactory {
         )
     }
 
+    //@ts-ignore
     public async getSrcDeployEvent(blockHash: string): Promise<[Sdk.Immutables, Sdk.DstImmutablesComplement]> {
         const event = this.iface.getEvent('SrcEscrowCreated')!
         const logs = await this.provider.getLogs({
