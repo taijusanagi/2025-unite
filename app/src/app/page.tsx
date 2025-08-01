@@ -5,7 +5,7 @@ import { FaGithub } from "react-icons/fa";
 import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
 import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
-import { Contract, parseEther } from "ethers";
+import { Contract } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
 import { useAccount, useChainId } from "wagmi";
 
@@ -14,10 +14,15 @@ import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal"; // Import the new component
 
 import Sdk from "@sdk/evm/cross-chain-sdk-shims";
-import { dummySrcChainId, dummyDstChainId } from "@sdk/evm/constants";
+import {
+  dummySrcChainId,
+  dummyDstChainId,
+  nativeTokenAddress,
+} from "@sdk/evm/constants";
 import { patchedDomain, getOrderHashWithPatch } from "@sdk/evm/patch";
 import IWETHContract from "@sdk/evm/contracts/IWETH.json";
-import { Wallet } from "@sdk/evm/wallet";
+
+import * as bitcoin from "bitcoinjs-lib";
 
 const { Address } = Sdk;
 
@@ -29,7 +34,7 @@ export default function Home() {
     chainId: Number(chainId),
     type: cfg.type,
     name: cfg.name,
-    symbol: `W${cfg.symbol}`,
+    symbol: cfg.symbol,
     unit: cfg.unit,
     exproler: cfg.explorer,
   }));
@@ -37,7 +42,7 @@ export default function Home() {
   const [fromChain, setFromChain] = useState(chains[0]);
   const [toChain, setToChain] = useState(chains[1]);
 
-  const [amount] = useState(10000);
+  const [amount] = useState(5000);
   const signer = useEthersSigner();
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
@@ -106,54 +111,56 @@ export default function Home() {
       const srcChainId = fromChain.chainId;
       const dstChainId = toChain.chainId;
 
-      const srcWrappedNativeTokenContract = new Contract(
-        config[srcChainId].wrappedNative,
-        IWETHContract.abi,
-        signer
-      );
-
-      // 1. Check balance
-      addStatus("Checking token balance");
-      const balance = await srcWrappedNativeTokenContract.balanceOf(
-        signer.address
-      );
-      updateLastStatus("done");
-
-      if (balance < amount) {
-        addStatus("Depositing native token");
-        const tx = await srcWrappedNativeTokenContract.deposit({
-          value: amount,
-        });
-        await tx.wait();
-        updateLastStatus("done", [
-          {
-            explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
-            network: fromChain.name,
-          },
-        ]);
-      }
-
-      // 2. Check allowance
-      addStatus("Checking token allowance");
-      const allowance = await srcWrappedNativeTokenContract.allowance(
-        signer.address,
-        config[srcChainId].limitOrderProtocol
-      );
-      updateLastStatus("done");
-
-      if (allowance < UINT_256_MAX) {
-        addStatus("Approving token allowance");
-        const tx = await srcWrappedNativeTokenContract.approve(
-          config[srcChainId].limitOrderProtocol,
-          UINT_256_MAX
+      if (config[srcChainId].type == "evm") {
+        const srcWrappedNativeTokenContract = new Contract(
+          config[srcChainId].wrappedNative!,
+          IWETHContract.abi,
+          signer
         );
-        await tx.wait();
-        updateLastStatus("done", [
-          {
-            explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
-            network: fromChain.name,
-          },
-        ]);
+
+        // 1. Check balance
+        addStatus("Checking token balance");
+        const balance = await srcWrappedNativeTokenContract.balanceOf(
+          signer.address
+        );
+        updateLastStatus("done");
+
+        if (balance < amount) {
+          addStatus("Depositing native token");
+          const tx = await srcWrappedNativeTokenContract.deposit({
+            value: amount,
+          });
+          await tx.wait();
+          updateLastStatus("done", [
+            {
+              explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
+              network: fromChain.name,
+            },
+          ]);
+        }
+
+        // 2. Check allowance
+        addStatus("Checking token allowance");
+        const allowance = await srcWrappedNativeTokenContract.allowance(
+          signer.address,
+          config[srcChainId].limitOrderProtocol
+        );
+        updateLastStatus("done");
+
+        if (allowance < UINT_256_MAX) {
+          addStatus("Approving token allowance");
+          const tx = await srcWrappedNativeTokenContract.approve(
+            config[srcChainId].limitOrderProtocol,
+            UINT_256_MAX
+          );
+          await tx.wait();
+          updateLastStatus("done", [
+            {
+              explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
+              network: fromChain.name,
+            },
+          ]);
+        }
       }
 
       // 3. Sign order
@@ -168,7 +175,10 @@ export default function Home() {
           makingAmount: BigInt(amount),
           takingAmount: BigInt(amount),
           makerAsset: new Address(config[srcChainId].wrappedNative),
-          takerAsset: new Address(config[dstChainId].wrappedNative),
+          takerAsset:
+            config[dstChainId].type === "evm"
+              ? new Address(config[dstChainId].wrappedNative)
+              : new Address(nativeTokenAddress),
         },
         {
           hashLock: Sdk.HashLock.forSingleFill(secret),
@@ -184,7 +194,7 @@ export default function Home() {
           srcChainId: dummySrcChainId,
           dstChainId: dummyDstChainId,
           srcSafetyDeposit: 1n,
-          dstSafetyDeposit: 1n,
+          dstSafetyDeposit: 0n,
         },
         {
           auction: new Sdk.AuctionDetails({
@@ -211,6 +221,14 @@ export default function Home() {
       order.inner.fusionExtension.srcChainId = srcChainId;
       order.inner.fusionExtension.dstChainId = dstChainId;
       order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20);
+
+      if (config[dstChainId].type == "btc") {
+        const { data } = bitcoin.address.fromBech32(
+          "tb1qvt6kw75svm5wfj867aaf0vgn4kxl5wzc4szz36"
+        );
+        // @ts-ignore
+        order.inner.inner.receiver = `0x${data.toString("hex")}`;
+      }
 
       const typedData = order.getTypedData(srcChainId);
       const signature = await signer.signTypedData(

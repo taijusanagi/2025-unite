@@ -1,13 +1,13 @@
 type ChainConfig = {
-  type: "evm";
+  type: "evm" | "btc";
   name: string;
-  symbol: "ETH" | "MON";
-  unit: "wei";
-  trueERC20: string;
-  wrappedNative: string;
-  limitOrderProtocol: string;
-  escrowFactory: string;
-  resolver: string;
+  symbol: "WETH" | "WMON" | "BTC";
+  unit: "wei" | "satoshi";
+  trueERC20?: string;
+  wrappedNative?: string;
+  limitOrderProtocol?: string;
+  escrowFactory?: string;
+  resolver?: string;
   rpc: string;
   explorer: string;
 };
@@ -16,7 +16,7 @@ export const config: Record<number, ChainConfig> = {
   84532: {
     type: "evm",
     name: "Base Sepolia",
-    symbol: "ETH",
+    symbol: "WETH",
     unit: "wei",
     trueERC20: "0x93992AF843537Cf0A07E6638ABbbFB837111C753",
     wrappedNative: "0x1bdd24840e119dc2602dcc587dd182812427a5cc",
@@ -29,7 +29,7 @@ export const config: Record<number, ChainConfig> = {
   10143: {
     type: "evm",
     name: "Monad Testnet",
-    symbol: "MON",
+    symbol: "WMON",
     unit: "wei",
     trueERC20: "0xf927004F33f26CaA1763BB21454Ef36AA76e1064",
     wrappedNative: "0x760afe86e5de5fa0ee542fc7b7b713e1c5425701",
@@ -37,6 +37,14 @@ export const config: Record<number, ChainConfig> = {
     escrowFactory: "0x73e5d195b5cf7eb46de86901ad941986e74921ca",
     resolver: "0xF920618C3CF765cE5570A15665C50b3e3f287352",
     rpc: "https://rpc.ankr.com/monad_testnet",
-    explorer: "https://testnet.monadexplorer.com/",
+    explorer: "https://testnet.monadexplorer.com",
+  },
+  99999: {
+    type: "btc",
+    name: "Bitcoin Testnet3",
+    symbol: "BTC",
+    unit: "satoshi",
+    rpc: "https://blockstream.info/testnet/api",
+    explorer: "https://blockstream.info/testnet",
   },
 };

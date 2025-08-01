@@ -642,11 +642,11 @@ async function main() {
     // await processWhenMakerAssetIsBTC();
 
     // await sendBitcoin({
-    //   fromWIF: privKeyA,
-    //   toAddress: resolverBech32Address!,
-    //   amountSats: 100000,
-    //   fromType: "p2pkh",
-    // });
+    //     fromWIF: privKeyA,
+    //     toAddress: resolverBech32Address!,
+    //     amountSats: 100000,
+    //     fromType: 'p2pkh'
+    // })
 }
 
 main().catch(console.error)
