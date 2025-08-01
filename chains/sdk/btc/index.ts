@@ -4,6 +4,12 @@ import {ECPairFactory, ECPairInterface} from 'ecpair'
 
 const ECPair = ECPairFactory(ecc)
 
+export type BtcWallet = {
+    keyPair: ECPairInterface
+    publicKey: Buffer
+    address: string
+}
+
 export function walletFromWIF(
     wif: string,
     network: bitcoin.Network

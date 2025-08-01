@@ -27,6 +27,8 @@ import * as bitcoin from "bitcoinjs-lib";
 import ECPairFactory from "ecpair";
 import * as ecc from "tiny-secp256k1";
 
+import { walletFromWIF, BtcWallet } from "@sdk/btc";
+
 const ECPair = ECPairFactory(ecc);
 const { Address } = Sdk;
 
@@ -47,13 +49,13 @@ export default function Home() {
   const [toChain, setToChain] = useState(chains[1]);
 
   const [amount] = useState(5000);
-  const signer = useEthersSigner();
+  const evmsigner = useEthersSigner();
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
   const [btcConnectedAddress, setBtcConnectedAddress] = useState("");
 
   // State for BTC connection
-  const [btcPrivateKey, setBtcPrivateKey] = useState<string | null>(null);
+  const [btcUserWallet, setBtcUserWallet] = useState<BtcWallet | null>(null);
 
   // State for the modals
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
@@ -66,13 +68,13 @@ export default function Home() {
     const savedKey = localStorage.getItem("btcPrivateKey");
     if (savedKey) {
       try {
-        // Validate key before setting it
         const network = bitcoin.networks.testnet;
-        ECPair.fromWIF(savedKey, network);
-        setBtcPrivateKey(savedKey);
+        const wallet = walletFromWIF(savedKey, network);
+        setBtcUserWallet(wallet);
       } catch (error) {
         console.error("Failed to load/validate BTC private key:", error);
         localStorage.removeItem("btcPrivateKey");
+        setBtcUserWallet(null);
       }
     }
   }, []);
@@ -100,33 +102,24 @@ export default function Home() {
   const handleBtcConnect = (privateKey: string) => {
     try {
       const network = bitcoin.networks.testnet;
-      const keyPair = ECPair.fromWIF(privateKey, network);
-      const { address } = bitcoin.payments.p2wpkh({
-        pubkey: Buffer.from(keyPair.publicKey),
-        network,
-      });
-
-      if (!address) {
-        throw new Error("Could not derive address from private key.");
-      }
+      const wallet = walletFromWIF(privateKey, network);
 
       localStorage.setItem("btcPrivateKey", privateKey);
-      setBtcPrivateKey(privateKey);
-      setBtcConnectedAddress(address);
+      setBtcUserWallet(wallet);
       setIsBtcConnectModalOpen(false);
     } catch (e) {
       console.error(e);
       alert(
         "Invalid Bitcoin Testnet private key (WIF format). Please check and try again."
       );
-      setBtcPrivateKey(null);
       localStorage.removeItem("btcPrivateKey");
+      setBtcUserWallet(null);
     }
   };
 
   const createOrder = async () => {
     // Check for appropriate wallet connection
-    if (fromChain.type === "evm" && !signer) {
+    if (fromChain.type === "evm" && !evmsigner) {
       alert("Please connect your EVM wallet first.");
       setIsConnectModalOpen(true);
       return;
@@ -135,7 +128,7 @@ export default function Home() {
       alert("Please switch to the 'From' network in your wallet.");
       return;
     }
-    if (fromChain.type === "btc" && !btcPrivateKey) {
+    if (fromChain.type === "btc" && !btcUserWallet) {
       alert("Please connect your BTC Testnet wallet first.");
       btcConnectWallet();
       return;
@@ -179,13 +172,13 @@ export default function Home() {
         const srcWrappedNativeTokenContract = new Contract(
           config[srcChainId].wrappedNative!,
           IWETHContract.abi,
-          signer!
+          evmsigner!
         );
 
         // 1. Check balance
         addStatus("Checking token balance");
         const balance = await srcWrappedNativeTokenContract.balanceOf(
-          signer!.address
+          evmsigner!.address
         );
         updateLastStatus("done");
 
@@ -206,7 +199,7 @@ export default function Home() {
         // 2. Check allowance
         addStatus("Checking token allowance");
         const allowance = await srcWrappedNativeTokenContract.allowance(
-          signer!.address,
+          evmsigner!.address,
           config[srcChainId].limitOrderProtocol
         );
         updateLastStatus("done");
@@ -241,7 +234,7 @@ export default function Home() {
         new Address(config[srcChainId].escrowFactory),
         {
           salt: Sdk.randBigInt(1000n),
-          maker: new Address(signer!.address),
+          maker: new Address(evmsigner!.address),
           makingAmount: BigInt(amount),
           takingAmount: BigInt(amount),
           makerAsset: new Address(config[srcChainId].wrappedNative!),
@@ -291,12 +284,12 @@ export default function Home() {
 
       let signature = "";
       if (config[dstChainId].type == "btc") {
-        const { data } = bitcoin.address.fromBech32(btcConnectedAddress);
+        const { data } = bitcoin.address.fromBech32(btcUserWallet!.address);
         // @ts-ignore
         order.inner.inner.receiver = `0x${data.toString("hex")}`;
       } else {
         const typedData = order.getTypedData(srcChainId);
-        signature = await signer!.signTypedData(
+        signature = await evmsigner!.signTypedData(
           {
             chainId: srcChainId,
             ...patchedDomain,
@@ -397,7 +390,7 @@ export default function Home() {
     }
   };
 
-  const isWalletConnected = evmConnectedAddress || btcPrivateKey;
+  const isWalletConnected = evmsigner || btcUserWallet;
 
   return (
     <>
