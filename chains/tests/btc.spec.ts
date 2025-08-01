@@ -18,6 +18,7 @@ import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from '../sdk/evm/resolver'
 import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
 import bip68 from 'bip68'
+import {walletFromWIF} from '../sdk/btc'
 
 const {Address} = Sdk
 
@@ -34,25 +35,11 @@ describe('btc', () => {
     const network = bitcoin.networks.regtest
     const API_BASE = 'http://localhost:8094/regtest/api'
 
-    const ECPair = ECPairFactory(ecc)
+    const btcUser = walletFromWIF(btcUserPk, network)
+    const btcResolver = walletFromWIF(btcResolverPk, network)
 
-    const btcUserKeyPair: ECPairInterface = ECPair.fromWIF(btcUserPk, network)
-    const btcResolverKeyPair: ECPairInterface = ECPair.fromWIF(btcResolverPk, network)
-
-    const btcUserPubKey = Buffer.from(btcUserKeyPair.publicKey)
-    const btcResolverPubKey = Buffer.from(btcResolverKeyPair.publicKey)
-
-    const btcUserAddress = bitcoin.payments.p2wpkh({
-        pubkey: btcUserPubKey,
-        network
-    }).address
-    const btcResolverAddress = bitcoin.payments.p2wpkh({
-        pubkey: btcResolverPubKey,
-        network
-    }).address
-
-    console.log('btcUserAddress', btcUserAddress)
-    console.log('btcResolverAddress', btcResolverAddress)
+    console.log('btcUser.address', btcUser.address)
+    console.log('btcResolver.address', btcResolver.address)
 
     const evmChainId = 1
     const dummyBtcChainId = 137 // set dummy value this first
@@ -114,7 +101,7 @@ describe('btc', () => {
         execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 101 ${btcMiningAddress}`)
         execSync(`sleep 5`)
 
-        const testAddresses = [btcUserAddress, btcResolverAddress]
+        const testAddresses = [btcUser.address, btcResolver.address]
 
         testAddresses.forEach((addr) => {
             execSync(`${BITCOIN_CLI} -rpcwallet=mining_address sendtoaddress ${addr} 1`)
@@ -142,8 +129,8 @@ describe('btc', () => {
                 {token: evm.weth, user: evmUser, resolver: evmResolverContract}
             ])
 
-            const btcUserInitialBalance = await btcGetBalance(btcUserAddress!) // maker
-            const btcResolverInitialBalance = await btcGetBalance(btcResolverAddress!) // taker
+            const btcUserInitialBalance = await btcGetBalance(btcUser.address!) // maker
+            const btcResolverInitialBalance = await btcGetBalance(btcResolver.address!) // taker
 
             // // User creates order
             const secret = randomBytes(32)
@@ -205,7 +192,7 @@ describe('btc', () => {
             // @ts-ignore
             order.inner.inner.takerAsset = new Address(evm.trueERC20)
 
-            const {data} = bitcoin.address.fromBech32(btcUserAddress!)
+            const {data} = bitcoin.address.fromBech32(btcUser.address!)
             // @ts-ignore
             order.inner.inner.receiver = `0x${data.toString('hex')}`
             // @ts-ignore
@@ -252,7 +239,7 @@ describe('btc', () => {
                 0,
                 network.bech32
             )
-            expect(rebuiltAddress).toBe(btcUserAddress) // to make sure the btc user address is available on-chain
+            expect(rebuiltAddress).toBe(btcUser.address) // to make sure the btc user address is available on-chain
 
             // ========================================
             // 1️⃣ PHASE 1: Taker (resolver) creates HTLC and deposits BTC
@@ -271,13 +258,13 @@ describe('btc', () => {
                 bitcoin.opcodes.OP_SHA256,
                 hashLock.sha256,
                 bitcoin.opcodes.OP_EQUALVERIFY,
-                btcUserPubKey, // 👤 Maker can claim with secret
+                btcUser.publicKey, // 👤 Maker can claim with secret
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ELSE,
                 bitcoin.script.number.encode(Number(dstTimeLocks.privateCancellation)),
                 bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
                 bitcoin.opcodes.OP_DROP,
-                btcResolverPubKey, // 👤 Taker can refund after timeout
+                btcResolver.publicKey, // 👤 Taker can refund after timeout
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ENDIF
             ])
@@ -290,7 +277,7 @@ describe('btc', () => {
             console.log('✅ HTLC P2SH Address:', p2sh.address)
 
             // === Taker (resolver) funds the HTLC ===
-            const utxos = await getUtxos(btcResolverAddress!)
+            const utxos = await getUtxos(btcResolver.address!)
             if (!utxos.length) {
                 console.error('❌ No UTXOs available to fund HTLC.')
                 return
@@ -313,7 +300,7 @@ describe('btc', () => {
                     hash: utxo.txid,
                     index: utxo.vout,
                     witnessUtxo: {
-                        script: bitcoin.payments.p2wpkh({pubkey: btcResolverPubKey, network}).output!,
+                        script: bitcoin.payments.p2wpkh({pubkey: btcResolver.publicKey, network}).output!,
                         value: utxo.value
                     }
                 })
@@ -326,15 +313,15 @@ describe('btc', () => {
 
             if (change > 0) {
                 psbt.addOutput({
-                    address: btcResolverAddress!, // refund to self
+                    address: btcResolver.address!, // refund to self
                     value: change
                 })
             }
 
             utxos.forEach((_, idx) => {
                 psbt.signInput(idx, {
-                    publicKey: btcResolverPubKey,
-                    sign: (hash) => Buffer.from(btcResolverKeyPair.sign(hash))
+                    publicKey: btcResolver.publicKey,
+                    sign: (hash) => Buffer.from(btcResolver.keyPair.sign(hash))
                 })
             })
 
@@ -386,13 +373,13 @@ describe('btc', () => {
             }
 
             spendPsbt.addOutput({
-                address: btcUserAddress!,
+                address: btcUser.address!,
                 value: redeemValue
             })
 
             spendPsbt.signInput(0, {
-                publicKey: btcUserPubKey,
-                sign: (hash) => Buffer.from(btcUserKeyPair.sign(hash))
+                publicKey: btcUser.publicKey,
+                sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash))
             })
 
             const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
@@ -444,8 +431,8 @@ describe('btc', () => {
             expect(evmInitialBalances[0].user - evmResultBalances[0].user).toBe(order.makingAmount)
             expect(evmResultBalances[0].resolver - evmInitialBalances[0].resolver).toBe(order.makingAmount)
 
-            const btcUserResultBalance = await btcGetBalance(btcUserAddress!) // maker
-            const btcResolverResultBalance = await btcGetBalance(btcResolverAddress!) // takerr
+            const btcUserResultBalance = await btcGetBalance(btcUser.address!) // maker
+            const btcResolverResultBalance = await btcGetBalance(btcResolver.address!) // takerr
 
             console.log('btcUserInitialBalance', btcUserInitialBalance)
             console.log('btcResolverInitialBalance', btcResolverInitialBalance)
@@ -472,14 +459,14 @@ describe('btc', () => {
                 sha256: bitcoin.crypto.sha256(secret)
             }
 
-            const {data} = bitcoin.address.fromBech32(btcUserAddress!)
+            const {data} = bitcoin.address.fromBech32(btcUser.address!)
 
             // use sdk to make order object
             const order = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory),
                 {
                     salt: Sdk.randBigInt(1000n),
-                    maker: new Address(`0x${bitcoin.address.fromBech32(btcUserAddress!).data.toString('hex')}`),
+                    maker: new Address(`0x${bitcoin.address.fromBech32(btcUser.address!).data.toString('hex')}`),
                     makingAmount: 10000n,
                     takingAmount: 9999n,
                     makerAsset: new Address(evm.trueERC20), // ths is dummy now
@@ -551,7 +538,7 @@ describe('btc', () => {
                 bitcoin.opcodes.OP_SHA256,
                 hashLock.sha256,
                 bitcoin.opcodes.OP_EQUALVERIFY,
-                btcResolverPubKey,
+                btcResolver.publicKey,
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ELSE,
                 bitcoin.script.number.encode(
@@ -559,7 +546,7 @@ describe('btc', () => {
                 ),
                 bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
                 bitcoin.opcodes.OP_DROP,
-                btcUserPubKey,
+                btcUser.publicKey,
                 bitcoin.opcodes.OP_CHECKSIG,
                 bitcoin.opcodes.OP_ENDIF
             ])
@@ -573,7 +560,7 @@ describe('btc', () => {
 
             // 👤 Maker's P2WPKH funding
             const makerPayment = bitcoin.payments.p2wpkh({
-                pubkey: btcUserPubKey,
+                pubkey: btcUser.publicKey,
                 network
             })
 
@@ -623,8 +610,8 @@ describe('btc', () => {
 
             utxos.forEach((_, idx) => {
                 psbt.signInput(idx, {
-                    publicKey: btcUserPubKey,
-                    sign: (hash) => Buffer.from(btcUserKeyPair.sign(hash))
+                    publicKey: btcUser.publicKey,
+                    sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash))
                 })
             })
 
@@ -720,7 +707,7 @@ describe('btc', () => {
                     orderHash: orderHash,
                     hashLock: hashLock.keccak256,
                     maker: order.maker,
-                    taker: new Address(`0x${bitcoin.address.fromBech32(btcResolverAddress!).data.toString('hex')}`),
+                    taker: new Address(`0x${bitcoin.address.fromBech32(btcResolver.address!).data.toString('hex')}`),
                     token: order.makerAsset,
                     amount: order.makingAmount,
                     // @ts-ignore
@@ -819,14 +806,14 @@ describe('btc', () => {
             }
 
             spendPsbt.addOutput({
-                address: btcResolverAddress!,
+                address: btcResolver.address!,
                 value: redeemValue
             })
 
             // Sign the input. This generates the signature and stores it in the PSBT.
             spendPsbt.signInput(0, {
-                publicKey: Buffer.from(btcResolverKeyPair.publicKey),
-                sign: (hash) => Buffer.from(btcResolverKeyPair.sign(hash))
+                publicKey: Buffer.from(btcResolver.keyPair.publicKey),
+                sign: (hash) => Buffer.from(btcResolver.keyPair.sign(hash))
             })
 
             // This custom finalizer function assembles the correct scriptSig.

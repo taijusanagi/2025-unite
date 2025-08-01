@@ -63,7 +63,7 @@ export default function Home() {
 
   // Check for saved BTC private key on mount
   useEffect(() => {
-    const savedKey = localStorage.getItem("btcTestnetPrivateKey");
+    const savedKey = localStorage.getItem("btcPrivateKey");
     if (savedKey) {
       try {
         // Validate key before setting it
@@ -72,7 +72,7 @@ export default function Home() {
         setBtcPrivateKey(savedKey);
       } catch (error) {
         console.error("Failed to load/validate BTC private key:", error);
-        localStorage.removeItem("btcTestnetPrivateKey");
+        localStorage.removeItem("btcPrivateKey");
       }
     }
   }, []);
@@ -110,7 +110,7 @@ export default function Home() {
         throw new Error("Could not derive address from private key.");
       }
 
-      localStorage.setItem("btcTestnetPrivateKey", privateKey);
+      localStorage.setItem("btcPrivateKey", privateKey);
       setBtcPrivateKey(privateKey);
       setBtcConnectedAddress(address);
       setIsBtcConnectModalOpen(false);
@@ -120,7 +120,7 @@ export default function Home() {
         "Invalid Bitcoin Testnet private key (WIF format). Please check and try again."
       );
       setBtcPrivateKey(null);
-      localStorage.removeItem("btcTestnetPrivateKey");
+      localStorage.removeItem("btcPrivateKey");
     }
   };
 
@@ -231,6 +231,12 @@ export default function Home() {
       addStatus("Sign the order in your wallet");
       const secret = uint8ArrayToHex(randomBytes(32));
       const timestamp = BigInt(Math.floor(Date.now() / 1000));
+
+      let takerAsset = new Address(nativeTokenAddress);
+      if (config[dstChainId].type == "evm") {
+        takerAsset = new Address(config[dstChainId].wrappedNative!);
+      }
+
       const order = Sdk.CrossChainOrder.new(
         new Address(config[srcChainId].escrowFactory),
         {
@@ -239,10 +245,7 @@ export default function Home() {
           makingAmount: BigInt(amount),
           takingAmount: BigInt(amount),
           makerAsset: new Address(config[srcChainId].wrappedNative!),
-          takerAsset:
-            config[dstChainId].type === "evm"
-              ? new Address(config[dstChainId].wrappedNative!)
-              : new Address(nativeTokenAddress),
+          takerAsset,
         },
         {
           hashLock: Sdk.HashLock.forSingleFill(secret),
@@ -257,7 +260,7 @@ export default function Home() {
           }),
           srcChainId: dummySrcChainId,
           dstChainId: dummyDstChainId,
-          srcSafetyDeposit: 1n,
+          srcSafetyDeposit: 0n,
           dstSafetyDeposit: 0n,
         },
         {
@@ -286,24 +289,24 @@ export default function Home() {
       order.inner.fusionExtension.dstChainId = dstChainId;
       order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20!);
 
+      let signature = "";
       if (config[dstChainId].type == "btc") {
-        const { data } = bitcoin.address.fromBech32(
-          "tb1qvt6kw75svm5wfj867aaf0vgn4kxl5wzc4szz36"
-        );
+        const { data } = bitcoin.address.fromBech32(btcConnectedAddress);
         // @ts-ignore
         order.inner.inner.receiver = `0x${data.toString("hex")}`;
+      } else {
+        const typedData = order.getTypedData(srcChainId);
+        signature = await signer!.signTypedData(
+          {
+            chainId: srcChainId,
+            ...patchedDomain,
+            verifyingContract: config[srcChainId].limitOrderProtocol,
+          },
+          { Order: typedData.types[typedData.primaryType] },
+          typedData.message
+        );
       }
 
-      const typedData = order.getTypedData(srcChainId);
-      const signature = await signer!.signTypedData(
-        {
-          chainId: srcChainId,
-          ...patchedDomain,
-          verifyingContract: config[srcChainId].limitOrderProtocol,
-        },
-        { Order: typedData.types[typedData.primaryType] },
-        typedData.message
-      );
       updateLastStatus("done");
 
       // 4. Submit order
