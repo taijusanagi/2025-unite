@@ -93,6 +93,19 @@ async function getUtxos(address: string): Promise<UTXO[]> {
   }));
 }
 
+async function waitForUtxo(
+  address: string,
+  timeoutMs = 10000
+): Promise<UTXO[]> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const utxos = await getUtxos(address);
+    if (utxos.length > 0) return utxos;
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  throw new Error(`UTXOs not found for ${address} after ${timeoutMs}ms`);
+}
+
 async function getBalance(address: string): Promise<number> {
   const utxos = await getUtxos(address);
   return utxos.reduce((sum: number, utxo: UTXO) => sum + utxo.value, 0);
@@ -132,7 +145,7 @@ async function sendBitcoin({
     return;
   }
 
-  const fee = 10000;
+  const fee = 2000;
   const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
 
   if (totalInput < amountSats + fee) {
@@ -200,6 +213,7 @@ async function verifyHTLCScriptHashFromTx(
   const txHex = await fetchWithRetry(() =>
     axios.get(`${API_BASE}/tx/${txid}/hex`).then((res) => res.data)
   );
+
   const tx = bitcoin.Transaction.fromHex(txHex);
 
   // Get expected scriptPubKey from known redeem script
@@ -276,8 +290,8 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
     return;
   }
 
-  const amount = 6000; // Match maker's amount or adjust as needed
-  const fee = 2000;
+  const amount = 5000; // Match maker's amount or adjust as needed
+  const fee = 1000;
   const totalInput = utxos.reduce((sum, u) => sum + u.value, 0);
   const change = totalInput - amount - fee;
 
@@ -333,7 +347,7 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
   // ========================================
   console.log("\n🔓 Phase 2: Maker (user) claims HTLC using secret...");
 
-  const htlcUtxos = await getUtxos(p2sh.address!);
+  const htlcUtxos = await waitForUtxo(p2sh.address!);
   if (!htlcUtxos.length) {
     console.error("❌ No UTXOs in HTLC address.");
     return;
@@ -353,7 +367,7 @@ async function processWhenTakerAssetIsBTC(): Promise<void> {
     redeemScript: htlcScript,
   });
 
-  const redeemFee = 2000;
+  const redeemFee = 1000;
   const redeemValue = htlcUtxo.value - redeemFee;
 
   if (redeemValue <= 0) {
@@ -456,8 +470,8 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     return;
   }
 
-  const amount = 6000;
-  const fee = 2000;
+  const amount = 5000;
+  const fee = 1000;
   const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
   const change = totalInput - amount - fee;
 
@@ -535,7 +549,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
   // ========================================
   console.log("\n🔓 Phase 3: Resolver redeems HTLC with secret...");
 
-  const htlcUtxos = await getUtxos(loaded.p2shAddress);
+  const htlcUtxos = await waitForUtxo(loaded.p2shAddress);
   if (!htlcUtxos.length) {
     console.error("❌ No UTXOs found at HTLC address.");
     return;
@@ -557,7 +571,7 @@ async function processWhenMakerAssetIsBTC(): Promise<void> {
     redeemScript: htlcScriptBuffer,
   });
 
-  const redeemFee = 2000;
+  const redeemFee = 1000;
   const redeemValue = htlcUtxo.value - redeemFee;
 
   if (redeemValue <= 0) {
@@ -637,8 +651,8 @@ async function main() {
     `Balance (Resolver P2WPKH): ${format(resolverP2WPKHBalance)} tBTC`
   );
 
-  await processWhenTakerAssetIsBTC();
-  await processWhenMakerAssetIsBTC();
+  // await processWhenTakerAssetIsBTC();
+  // await processWhenMakerAssetIsBTC();
 
   // await sendBitcoin({
   //   fromWIF: privKeyA,
