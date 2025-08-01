@@ -15,13 +15,6 @@ export const config: Record<
     resolver: "0x88049d50AAE11BAa334b5E86B6B90BaE078f5851",
     url: "https://sepolia.base.org",
   },
-  421614: {
-    wrappedNative: "0x2836ae2ea2c013acd38028fd0c77b92cccfa2ee4",
-    limitOrderProtocol: "0x3fd6bdD2c7a06159D7762D06316eCac7c173763a",
-    escrowFactory: "0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224",
-    resolver: "0x915e0305E320317C9D77187b195a682858A254c0",
-    url: "https://arbitrum-sepolia.api.onfinality.io/public",
-  },
   10143: {
     wrappedNative: "0x760afe86e5de5fa0ee542fc7b7b713e1c5425701",
     limitOrderProtocol: "0x3c63B9da5DA101F36061C9503a06906031D7457c",

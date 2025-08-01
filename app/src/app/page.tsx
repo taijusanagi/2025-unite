@@ -20,13 +20,14 @@ import { Resolver } from "@/lib/resolver";
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
+  const [showConnectModal, setShowConnectModal] = useState(false);
 
-  const coins = ["/coins/monad.png", "/coins/tron.png", "/coins/ton.png"];
+  const coins = ["/coins/monad.png", "/coins/btc.png"];
 
   const chains = [
     { name: "Base Sepolia", symbol: "WETH", chainId: 84532 },
-    { name: "Arbitrum Sepolia", symbol: "WETH", chainId: 421614 },
     { name: "Monad Testnet", symbol: "WMON", chainId: 10143 },
+    { name: "Bitcoin Testnet 3", symbol: "BTC", chainId: 99999 },
   ];
 
   const [fromChain, setFromChain] = useState(chains[0]);
@@ -318,7 +319,12 @@ export default function Home() {
         >
           GattaiSwap
         </div>
-        <ConnectButton chainStatus="icon" accountStatus="avatar" />
+        <button
+          onClick={() => setShowConnectModal(true)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
+        >
+          Connect
+        </button>
       </div>
 
       {/* 2. Hero */}
@@ -470,6 +476,60 @@ export default function Home() {
           <FaGithub className="w-5 h-5" />
         </a>
       </footer>
+
+      {showConnectModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 cursor-pointer"
+          onClick={() => setShowConnectModal(false)}
+        >
+          <div
+            className="bg-gray-900 p-6 rounded-xl w-96 text-white space-y-6 relative cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Section 1: Chain Abstraction */}
+            <div className="space-y-3 border-b border-gray-700 pb-4">
+              <h3 className="text-lg font-semibold text-center text-gray-300">
+                Try Chain Abstraction
+              </h3>
+              <button
+                onClick={() => {}}
+                className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
+              >
+                Gattai Wallet
+              </button>
+            </div>
+
+            {/* Section 2: Specific Wallet Connect */}
+            <div className="space-y-3">
+              <h3 className="text-lg font-semibold text-center text-gray-300">
+                Connect Wallet on specific chain
+              </h3>
+
+              <button
+                onClick={() => {}}
+                className="w-full py-2 bg-blue-600 rounded-md hover:bg-blue-700 transition cursor-pointer font-semibold"
+              >
+                EVM Wallet
+              </button>
+
+              <button
+                onClick={() => {}}
+                className="w-full py-2 bg-yellow-600 rounded-md hover:bg-yellow-700 transition cursor-pointer font-semibold"
+              >
+                BTC Wallet
+              </button>
+            </div>
+
+            {/* Close Button */}
+            <button
+              onClick={() => setShowConnectModal(false)}
+              className="absolute top-2 right-3 text-gray-400 hover:text-white text-xl cursor-pointer"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
