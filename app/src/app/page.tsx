@@ -215,6 +215,7 @@ export default function Home() {
       const typedData = order.getTypedData(srcChainId);
       const signature = await signer.signTypedData(
         {
+          chainId: srcChainId,
           ...patchedDomain,
           verifyingContract: config[srcChainId].limitOrderProtocol,
         },
