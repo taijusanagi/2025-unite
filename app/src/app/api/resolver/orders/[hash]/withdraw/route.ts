@@ -40,7 +40,7 @@ export async function POST(
       );
     }
 
-    const srcProvider = new JsonRpcProvider(config[srcChainId].url, srcChainId);
+    const srcProvider = new JsonRpcProvider(config[srcChainId].rpc, srcChainId);
     const srcResolverWallet = new Wallet(privateKey, srcProvider);
 
     const resolver = new Resolver(

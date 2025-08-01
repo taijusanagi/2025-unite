@@ -41,8 +41,8 @@ export async function POST(
     } = await response.json();
     const order = Sdk.CrossChainOrder.fromDataAndExtension(_order, extension);
 
-    const srcProvider = new JsonRpcProvider(config[srcChainId].url, srcChainId);
-    const dstProvider = new JsonRpcProvider(config[dstChainId].url, dstChainId);
+    const srcProvider = new JsonRpcProvider(config[srcChainId].rpc, srcChainId);
+    const dstProvider = new JsonRpcProvider(config[dstChainId].rpc, dstChainId);
 
     const srcResolverWallet = new Wallet(privateKey, srcProvider);
     const dstResolverWallet = new Wallet(privateKey, dstProvider);

@@ -23,19 +23,19 @@ export async function GET(
     const parsed = JSON.parse(data);
     const {
       status,
-      srcWithdrawTxHash,
-      dstWithdrawTxHash,
       srcDeployHash,
       dstDeployHash,
+      srcWithdrawTxHash,
+      dstWithdrawTxHash,
     } = parsed;
 
     return NextResponse.json({
       hash,
       status,
-      srcWithdrawTxHash,
-      dstWithdrawTxHash,
       srcDeployHash,
       dstDeployHash,
+      srcWithdrawTxHash,
+      dstWithdrawTxHash,
     });
   } catch (err) {
     console.error("Error fetching order status:", err);

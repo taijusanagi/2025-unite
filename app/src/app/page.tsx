@@ -19,16 +19,14 @@ export default function Home() {
   const [showDex, setShowDex] = useState(true);
   const { openConnectModal } = useConnectModal();
   const coins = ["/coins/monad.png", "/coins/btc.png"];
-  const chains = [
-    { name: "Base Sepolia", symbol: "WETH", chainId: 84532, unit: "wei" },
-    { name: "Monad Testnet", symbol: "WMON", chainId: 10143, unit: "wei" },
-    {
-      name: "Bitcoin Testnet 3",
-      symbol: "BTC",
-      chainId: 99999,
-      unit: "satoshi",
-    },
-  ];
+  const chains = Object.entries(config).map(([chainId, cfg]) => ({
+    chainId: Number(chainId),
+    type: cfg.type,
+    name: cfg.name,
+    symbol: `W${cfg.symbol}`,
+    unit: cfg.unit,
+    exproler: cfg.explorer,
+  }));
 
   const [fromChain, setFromChain] = useState(chains[0]);
   const [toChain, setToChain] = useState(chains[1]);
@@ -76,12 +74,18 @@ export default function Home() {
       setStatuses(currentStatuses);
     };
 
-    const updateLastStatus = (state: StatusState, explorerUrl?: string) => {
+    const updateLastStatus = (
+      state: StatusState,
+      explorers?: {
+        explorerUrl: string;
+        network?: string;
+      }[]
+    ) => {
       if (currentStatuses.length === 0) return;
       const lastStatus = currentStatuses[currentStatuses.length - 1];
       currentStatuses = [
         ...currentStatuses.slice(0, -1),
-        { ...lastStatus, state, explorerUrl },
+        { ...lastStatus, state, explorers },
       ];
       setStatuses(currentStatuses);
     };
@@ -114,11 +118,13 @@ export default function Home() {
         const tx = await srcWrappedNativeTokenContract.deposit({
           value: amount,
         });
-        const receipt = await tx.wait();
-        updateLastStatus(
-          "done",
-          `https://sepolia.basescan.org/tx/${receipt.hash}`
-        );
+        await tx.wait();
+        updateLastStatus("done", [
+          {
+            explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
+            network: fromChain.name,
+          },
+        ]);
       }
 
       // 2. Check allowance
@@ -135,11 +141,13 @@ export default function Home() {
           config[srcChainId].limitOrderProtocol,
           UINT_256_MAX
         );
-        const receipt = await tx.wait();
-        updateLastStatus(
-          "done",
-          `https://sepolia.basescan.org/tx/${receipt.hash}`
-        );
+        await tx.wait();
+        updateLastStatus("done", [
+          {
+            explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
+            network: fromChain.name,
+          },
+        ]);
       }
 
       // 3. Sign order
@@ -228,10 +236,21 @@ export default function Home() {
       while (true) {
         const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
         const statusJson = await statusRes.json();
-        if (statusJson.status === "escrow_created") break;
+        if (statusJson.status === "escrow_created") {
+          updateLastStatus("done", [
+            {
+              explorerUrl: `${fromChain.exproler}/tx/${statusJson.srcDeployHash}`,
+              network: fromChain.name,
+            },
+            {
+              explorerUrl: `${toChain.exproler}/tx/${statusJson.dstDeployHash}`,
+              network: toChain.name,
+            },
+          ]);
+          break;
+        }
         await new Promise((r) => setTimeout(r, 3000));
       }
-      updateLastStatus("done");
 
       // 6. Submit secret
       addStatus("Submitting secret");
@@ -248,10 +267,21 @@ export default function Home() {
       while (true) {
         const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
         const statusJson = await statusRes.json();
-        if (statusJson.status === "withdraw_completed") break;
+        if (statusJson.status === "withdraw_completed") {
+          updateLastStatus("done", [
+            {
+              explorerUrl: `${fromChain.exproler}/tx/${statusJson.srcWithdrawTxHash}`,
+              network: fromChain.name,
+            },
+            {
+              explorerUrl: `${toChain.exproler}/tx/${statusJson.dstWithdrawTxHash}`,
+              network: toChain.name,
+            },
+          ]);
+          break;
+        }
         await new Promise((r) => setTimeout(r, 3000));
       }
-      updateLastStatus("done");
 
       // 8. Done
       addFinalStatus("Swap Complete! 🎉", "done");

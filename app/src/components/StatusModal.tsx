@@ -7,7 +7,10 @@ export type StatusState = "loading" | "done" | "failed" | "idle";
 export interface Status {
   text: string;
   state: StatusState;
-  explorerUrl?: string;
+  explorers?: {
+    explorerUrl: string;
+    network?: string;
+  }[];
 }
 
 interface StatusModalProps {
@@ -150,16 +153,18 @@ const StatusModal: React.FC<StatusModalProps> = ({
                 ) : (
                   <p className="text-gray-200">{status.text}</p>
                 )}
-                {status.explorerUrl && (
-                  <a
-                    href={status.explorerUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-400 hover:underline mt-1 inline-flex items-center gap-1"
-                  >
-                    View Transaction ↗
-                  </a>
-                )}
+                {status.explorers?.map((explorer, i) => (
+                  <div key={i}>
+                    <a
+                      href={explorer.explorerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-400 hover:underline mt-1 inline-flex items-center gap-1"
+                    >
+                      View {explorer.network} Transaction ↗
+                    </a>
+                  </div>
+                ))}
               </div>
             </div>
           ))}
