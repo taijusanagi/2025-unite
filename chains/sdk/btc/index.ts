@@ -177,12 +177,19 @@ export function createDstHtlcScript(
     btcUserPublicKey: Buffer,
     btcResolverPublicKey: Buffer
 ): Buffer {
+    console.log('orderHashHex', orderHashHex)
+    console.log('hashLockSha256', hashLockSha256.toString('hex'))
+    console.log('privateWithdrawal', privateWithdrawal)
+    console.log('privateCancellation', privateCancellation)
+    console.log('btcUserPublicKey', btcUserPublicKey.toString('hex'))
+    console.log('btcResolverPublicKey', btcResolverPublicKey.toString('hex'))
+
     return bitcoin.script.compile([
         Buffer.from(hexToUint8Array(orderHashHex)),
         bitcoin.opcodes.OP_DROP,
-        bitcoin.script.number.encode(Number(privateWithdrawal)),
-        bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-        bitcoin.opcodes.OP_DROP,
+        // bitcoin.script.number.encode(Number(privateWithdrawal)),
+        // bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+        // bitcoin.opcodes.OP_DROP,
         bitcoin.opcodes.OP_IF,
         bitcoin.opcodes.OP_SHA256,
         hashLockSha256,

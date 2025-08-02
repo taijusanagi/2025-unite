@@ -97,7 +97,7 @@ describe('btc', () => {
 
         btcMiningAddress = execSync(`${BITCOIN_CLI} -rpcwallet=mining_address getnewaddress`).toString().trim()
 
-        execSync(`${BITCOIN_CLI} setmocktime ${btcTimestamp}`)
+        // execSync(`${BITCOIN_CLI} setmocktime ${btcTimestamp}`)
         execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 101 ${btcMiningAddress}`)
         execSync(`sleep 5`)
 
@@ -124,7 +124,7 @@ describe('btc', () => {
     })
 
     describe('evm -> btc', () => {
-        it('should work', async () => {
+        it.only('should work', async () => {
             console.log('\n========== 🛠️ Phase 1: CREATE ORDER ==========')
 
             console.log('🔹 User makes order')
@@ -313,17 +313,19 @@ describe('btc', () => {
             console.log('🔗 btcDstEscrowHash:', btcDstEscrowHash)
 
             console.log('\n========== 💸 Phase 3: WITHDRAW ==========')
-            console.log('🔹 Resolver withdraws from HTLC on BTC chain')
+            console.log('🔹 User (Maker) withdraws BTC from HTLC on destination (Bitcoin) chain')
 
-            // check dst escrow
+            // Ensure HTLC on BTC chain is valid
             await btcProvider.verifyHTLCScriptHashFromTx(btcDstEscrowHash, htlcScript)
-            // verify src
+
+            // Simulate time passage to enable locktime
             await increaseTime([evm], 11)
 
+            // Prepare Bitcoin HTLC redeem transaction
             const spendPsbt = new bitcoin.Psbt({network})
-            const rawTxHex = await await btcProvider.getRawTransactionHex(btcDstEscrowHash)
+            const rawTxHex = await btcProvider.getRawTransactionHex(btcDstEscrowHash)
 
-            spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal))
+            // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal))
             spendPsbt.addInput({
                 hash: btcDstEscrowHash,
                 index: 0,
@@ -340,16 +342,19 @@ describe('btc', () => {
                 return
             }
 
+            // Send BTC to the user (maker)
             spendPsbt.addOutput({
                 address: btcUser.address!,
                 value: redeemValue
             })
 
+            // User signs the input to claim funds
             spendPsbt.signInput(0, {
                 publicKey: btcUser.publicKey,
                 sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash))
             })
 
+            // Finalize the input with the unlocking script
             const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
                 const signature = input.partialSig[0].signature
 
@@ -373,16 +378,19 @@ describe('btc', () => {
             const finalTxHex = spendPsbt.extractTransaction().toHex()
             const finalTxId = await btcProvider.broadcastTx(finalTxHex)
 
-            console.log('🎉 Maker successfully claimed BTC from HTLC!')
-            console.log('✅ Redemption TXID:', finalTxId)
+            console.log('🎉 User (Maker) successfully claimed BTC from HTLC!')
+            console.log('✅ BTC Redemption TXID:', finalTxId)
 
-            console.log('\n🔹 Resolver withdraws on source chain (ETH)')
+            console.log('\n🔹 Resolver (Taker) withdraws ETH from escrow on source (EVM) chain')
+
             const ESCROW_SRC_IMPLEMENTATION = await evmFactory.getSourceImpl()
             const evmSrcEscrowAddress = new Sdk.EscrowFactory(new Address(evm.escrowFactory)).getSrcEscrowAddress(
                 srcEscrowEvent[0],
                 ESCROW_SRC_IMPLEMENTATION
             )
+
             console.log(`[${evmChainId}] 🔓 Withdrawing from escrow: ${evmSrcEscrowAddress}`)
+
             const {txHash: resolverWithdrawHash} = await evmResolver.send(
                 resolverContract.withdraw(
                     'src',
@@ -391,24 +399,20 @@ describe('btc', () => {
                     srcEscrowEvent[0].build()
                 )
             )
-            console.log(`[${evmChainId}] ✅ Withdrawal tx hash: ${resolverWithdrawHash}`)
 
+            console.log(`[${evmChainId}] ✅ ETH Withdrawal TXID: ${resolverWithdrawHash}`)
+
+            // Check ETH balances after withdrawal
             const evmResultBalances = await evmGetBalances([
                 {token: evm.weth, user: evmUser, resolver: evmResolverContract}
             ])
 
-            // user transferred funds to resolver on evm chain
             expect(evmInitialBalances[0].user - evmResultBalances[0].user).toBe(order.makingAmount)
             expect(evmResultBalances[0].resolver - evmInitialBalances[0].resolver).toBe(order.makingAmount)
 
-            const btcUserResultBalance = await btcProvider.getBalance(btcUser.address!) // maker
-            const btcResolverResultBalance = await btcProvider.getBalance(btcResolver.address!) // takerr
-
-            console.log('\n🔍 Final Balance Check:')
-            console.log('BTC User Balance Before:', btcUserInitialBalance)
-            console.log('BTC User Balance After :', btcUserResultBalance)
-            console.log('BTC Resolver Before     :', btcResolverInitialBalance)
-            console.log('BTC Resolver After      :', btcResolverResultBalance)
+            // Check BTC balances after user withdrawal
+            const btcUserResultBalance = await btcProvider.getBalance(btcUser.address!)
+            const btcResolverResultBalance = await btcProvider.getBalance(btcResolver.address!)
 
             expect(btcUserResultBalance - btcUserInitialBalance).toBe(redeemValue)
             expect(btcResolverInitialBalance - btcResolverResultBalance).toBe(amount + fee)

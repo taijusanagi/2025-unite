@@ -165,6 +165,16 @@ export async function POST(
 
       // BTC takes too long to be confirmed so it uses src deployed value for now
       const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks();
+
+      console.log(
+        "dstTimeLocks.privateWithdrawal",
+        dstTimeLocks.privateWithdrawal
+      );
+      console.log(
+        "dstTimeLocks.privateCancellation",
+        dstTimeLocks.privateCancellation
+      );
+
       const htlcScriptBuffer = createDstHtlcScript(
         hash,
         Buffer.from(hashLock.sha256, "hex"),
@@ -240,9 +250,11 @@ export async function POST(
       console.log("✅ Taker has funded HTLC:");
       console.log("🔗 btcDstEscrowHash:", btcDstEscrowHash);
 
+      // skip confirmation check since it takes too long time
       // const { confirmedAt } = await btcProvider.waitForTxConfirmation(
       //   btcDstEscrowHash
       // );
+      // console.log("confirmedAt", confirmedAt);
 
       dstEscrowAddress = btcDstEscrowHash;
       // BTC takes too long to be confirmed so it uses src deployed value for now

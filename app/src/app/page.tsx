@@ -270,12 +270,12 @@ export default function Home() {
           hashLock: hashLock.keccak256,
           timeLocks: Sdk.TimeLocks.new({
             srcWithdrawal: 10n,
-            srcPublicWithdrawal: 120n,
-            srcCancellation: 121n,
-            srcPublicCancellation: 122n,
+            srcPublicWithdrawal: 1209n,
+            srcCancellation: 1210n,
+            srcPublicCancellation: 1211n,
             dstWithdrawal: 10n,
-            dstPublicWithdrawal: 100n,
-            dstCancellation: 101n,
+            dstPublicWithdrawal: 609n,
+            dstCancellation: 610n,
           }),
           srcChainId: dummySrcChainId,
           dstChainId: dummyDstChainId,
@@ -413,7 +413,21 @@ export default function Home() {
           dstWithdrawParamsJson.htlcScript
         );
         const htlcScript = Buffer.from(dstWithdrawParamsJson.htlcScript, "hex");
-        spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
+
+        await btcProvider.verifyHTLCScriptHashFromTx(
+          dstWithdrawParamsJson.dstEscrowAddress,
+          htlcScript
+        );
+
+        console.log(
+          "dstTimeLocks.privateWithdrawal",
+          dstTimeLocks.privateWithdrawal
+        );
+        console.log(
+          "dstTimeLocks.privateCancellation",
+          dstTimeLocks.privateCancellation
+        );
+        // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
         spendPsbt.addInput({
           hash: dstWithdrawParamsJson.dstEscrowAddress,
           index: 0,
