@@ -15,6 +15,10 @@ const nextConfig: NextConfig = {
         fs: false,
       };
     }
+    config.module.rules.push({
+      test: /\.wasm$/,
+      type: "asset/resource",
+    });
     return config;
   },
 };
