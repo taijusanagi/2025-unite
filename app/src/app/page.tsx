@@ -57,7 +57,7 @@ export default function Home() {
   const [toChain, setToChain] = useState(chains[0]);
   const [amount] = useState(5000);
 
-  const evmsigner = useEthersSigner();
+  const evmSigner = useEthersSigner();
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
 
@@ -128,7 +128,7 @@ export default function Home() {
       return;
     }
 
-    if (fromChain.type === "evm" && !evmsigner) {
+    if (fromChain.type === "evm" && !evmSigner) {
       console.warn("⚠️ EVM signer not connected.");
       alert("Please connect your EVM wallet to place an order.");
       evmConnectWallet();
@@ -154,6 +154,9 @@ export default function Home() {
       btcConnectWallet();
       return;
     }
+
+    console.log("conneced evm address", evmSigner?.address);
+    console.log("conneced btc address", btcUser?.address);
 
     console.log("✅ All pre-checks passed.");
     setIsStatusModalOpen(true);
@@ -192,12 +195,12 @@ export default function Home() {
         const srcWrappedNativeTokenContract = new Contract(
           config[srcChainId].wrappedNative!,
           IWETHContract.abi,
-          evmsigner!
+          evmSigner!
         );
 
         addStatus("Checking token balance");
         const balance = await srcWrappedNativeTokenContract.balanceOf(
-          evmsigner!.address
+          evmSigner!.address
         );
         console.log("💰 Token balance:", balance.toString());
         updateLastStatus("done");
@@ -219,7 +222,7 @@ export default function Home() {
 
         addStatus("Checking token allowance");
         const allowance = await srcWrappedNativeTokenContract.allowance(
-          evmsigner!.address,
+          evmSigner!.address,
           config[srcChainId].limitOrderProtocol
         );
         console.log("🔓 Token allowance:", allowance.toString());
@@ -260,7 +263,7 @@ export default function Home() {
         new Address(config[srcChainId].escrowFactory),
         {
           salt: Sdk.randBigInt(1000n),
-          maker: new Address(evmsigner!.address),
+          maker: new Address(evmSigner!.address),
           makingAmount: BigInt(amount),
           takingAmount: BigInt(amount),
           makerAsset: new Address(config[srcChainId].wrappedNative!),
@@ -304,7 +307,6 @@ export default function Home() {
         }
       );
 
-      console.log("📦 Order constructed:", order);
       order.inner.fusionExtension.srcChainId = srcChainId;
       order.inner.fusionExtension.dstChainId = dstChainId;
       order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20!);
@@ -316,10 +318,12 @@ export default function Home() {
         );
       }
 
+      console.log("📦 Order constructed:", order);
+
       if (config[srcChainId].type !== "btc") {
         const typedData = order.getTypedData(srcChainId);
         console.log("📝 Signing typed data:", typedData);
-        signature = await evmsigner!.signTypedData(
+        signature = await evmSigner!.signTypedData(
           {
             chainId: srcChainId,
             ...patchedDomain,
@@ -497,16 +501,23 @@ export default function Home() {
         const statusJson = await statusRes.json();
         if (statusJson.status === "withdraw_completed") {
           console.log("✅ Withdrawal complete:", statusJson);
-          updateLastStatus("done", [
-            {
+          const explorers = [];
+
+          if (statusJson.srcWithdrawHash) {
+            explorers.push({
               explorerUrl: `${fromChain.exproler}/tx/${statusJson.srcWithdrawHash}`,
               network: fromChain.name,
-            },
-            {
+            });
+          }
+
+          if (statusJson.dstWithdrawHash) {
+            explorers.push({
               explorerUrl: `${toChain.exproler}/tx/${statusJson.dstWithdrawHash}`,
               network: toChain.name,
-            },
-          ]);
+            });
+          }
+
+          updateLastStatus("done", explorers);
           break;
         }
         await new Promise((r) => setTimeout(r, 3000));
@@ -534,7 +545,7 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-4">
             {/* Show EVM wallet if connected */}
-            {evmsigner && (
+            {evmSigner && (
               <ConnectButton
                 chainStatus="icon"
                 accountStatus="avatar"
@@ -556,7 +567,7 @@ export default function Home() {
             )}
 
             {/* Show a connect button if EITHER wallet is not connected */}
-            {(!evmsigner || !btcUser) && (
+            {(!evmSigner || !btcUser) && (
               <button
                 onClick={() => setIsConnectModalOpen(true)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
@@ -728,7 +739,7 @@ export default function Home() {
         onConnectGattai={() =>
           alert("Gattai Wallet connection not implemented yet.")
         }
-        isEvmConnected={!!evmsigner}
+        isEvmConnected={!!evmSigner}
         isBtcConnected={!!btcUser}
       />
       <BtcConnectModal

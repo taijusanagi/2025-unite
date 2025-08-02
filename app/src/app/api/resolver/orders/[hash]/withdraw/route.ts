@@ -58,7 +58,7 @@ export async function POST(
     let dstWithdrawHash = "";
 
     console.log("Withdraw in destination chain");
-    if (config[srcChainId].type === "btc") {
+    if (config[dstChainId].type === "btc") {
       console.log("Destination chain: BTC");
       console.log("BTC chaim must be done by user, skip...");
     } else {
