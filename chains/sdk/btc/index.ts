@@ -5,7 +5,7 @@ import axios, {AxiosInstance} from 'axios'
 import {hexToUint8Array} from '@1inch/byte-utils'
 const ECPair = ECPairFactory(ecc)
 
-import bip68 from 'bip68'
+const bip68 = require('bip68')
 
 export type BtcWallet = {
     keyPair: ECPairInterface

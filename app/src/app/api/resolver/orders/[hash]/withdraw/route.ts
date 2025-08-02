@@ -5,9 +5,9 @@ import { JsonRpcProvider } from "ethers";
 import { NextRequest, NextResponse } from "next/server";
 import * as bitcoin from "bitcoinjs-lib";
 import { BtcProvider, walletFromWIF } from "@sdk/btc";
-import Sdk from "@sdk/evm/cross-chain-sdk-shims";
+// import Sdk from "@sdk/evm/cross-chain-sdk-shims";
 
-const bip68 = require("bip68");
+// const bip68 = require("bip68");
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 const btcPrivateKey = process.env.BTC_PRIVATE_KEY || "0x";
@@ -107,36 +107,6 @@ export async function POST(
       const scriptContainsResolverKey = htlcScript.includes(
         Buffer.from(resolverPubKeyHex, "hex")
       );
-
-      // Log to confirm
-      console.log("Signing pubkey:", resolverPubKeyHex);
-      console.log("HTLC contains resolver pubkey:", scriptContainsResolverKey);
-
-      const wrongKey =
-        "02ce09b3d6b374619431656279fb2506fe665404adc39afccb14ca3d8e3c3a0d78";
-      console.log(
-        "Expected resolver pubkey:",
-        Buffer.from(btcResolver.keyPair.publicKey).toString("hex")
-      );
-      console.log(
-        "Does it match error key?",
-        Buffer.from(btcResolver.keyPair.publicKey).toString("hex") === wrongKey
-      );
-
-      const tx = bitcoin.Transaction.fromHex(rawTxHex);
-      const expectedScriptPubKey = bitcoin.payments
-        .p2sh({
-          redeem: { output: htlcScriptBuffer, network },
-          network,
-        })
-        .output!.toString("hex");
-
-      const matchIndex = tx.outs.findIndex(
-        (out) => out.script.toString("hex") === expectedScriptPubKey
-      );
-
-      console.log("Found matching output index:", matchIndex);
-      console.log("Using input index (vout):", htlcUtxo.vout);
 
       // const sequenceValue = bip68.encode({
       //   seconds: Number(srcImmutables.timeLocks._srcWithdrawal),
