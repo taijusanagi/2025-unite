@@ -1,7 +1,7 @@
 type ChainConfig = {
   type: "evm" | "btc";
   name: string;
-  symbol: "WETH" | "WMON" | "BTC";
+  symbol: "WETH" | "WMON" | "WXTZ" | "BTC";
   unit: "wei" | "satoshi";
   trueERC20?: string;
   wrappedNative?: string;
@@ -38,6 +38,19 @@ export const config: Record<number, ChainConfig> = {
     resolver: "0xF920618C3CF765cE5570A15665C50b3e3f287352",
     rpc: "https://rpc.ankr.com/monad_testnet",
     explorer: "https://testnet.monadexplorer.com",
+  },
+  128123: {
+    type: "evm",
+    name: "Etherlink Testnet",
+    symbol: "WXTZ",
+    unit: "wei",
+    trueERC20: "0x436b7B4d6cBe36A8cE531b5C5DAa3Eb369035EF4",
+    wrappedNative: "0xB1Ea698633d57705e93b0E40c1077d46CD6A51d8",
+    limitOrderProtocol: "0x64BE4a6b41A5910b56e26c587454cDc023614e92",
+    escrowFactory: "0x7c054c1081F747cbC39Aa4899A53378eA66b3Dea",
+    resolver: "0xF920618C3CF765cE5570A15665C50b3e3f287352",
+    rpc: "https://rpc.ankr.com/etherlink_testnet",
+    explorer: "https://testnet.explorer.etherlink.com",
   },
   99999: {
     type: "btc",

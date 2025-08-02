@@ -358,7 +358,7 @@ export async function POST(
       console.log(`Destination escrow address: ${dstEscrowAddress}`);
     }
 
-    fetch(`${process.env.APP_URL}/api/relayer/orders/${hash}/escrow`, {
+    await fetch(`${process.env.APP_URL}/api/relayer/orders/${hash}/escrow`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -373,6 +373,8 @@ export async function POST(
         htlcScript,
       }),
     });
+
+    console.log(`Done`);
 
     return NextResponse.json({
       success: true,

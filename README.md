@@ -44,6 +44,14 @@ https://testnet.monadexplorer.com/address/0xF920618C3CF765cE5570A15665C50b3e3f28
 TrueERC20
 https://testnet.monadexplorer.com/address/0xf927004F33f26CaA1763BB21454Ef36AA76e1064
 
+## Etherlink
+
+== Logs ==
+LimitOrderProtocol deployed at: 0x64BE4a6b41A5910b56e26c587454cDc023614e92
+EscrowFactory deployed at: 0x7c054c1081F747cbC39Aa4899A53378eA66b3Dea
+Resolver deployed at: 0xF920618C3CF765cE5570A15665C50b3e3f287352
+ERC20True deployed at: 0x436b7B4d6cBe36A8cE531b5C5DAa3Eb369035EF4
+
 ## Patch on SDK
 
 - limit-order-sdk/dist/cjs/limit-order/eip712/domain.js

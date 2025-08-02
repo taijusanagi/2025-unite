@@ -28,7 +28,10 @@ contract Deploy is Script {
             weth = IWETH(0x2836ae2eA2c013acD38028fD0C77B92cccFa2EE4);
         } else if (chainId == 10143) {
             weth = IWETH(0x760AfE86e5de5fa0Ee542fc7B7B713e1c5425701);
-        } else {
+        } else if (chainId == 128123){
+            weth = IWETH(0xB1Ea698633d57705e93b0E40c1077d46CD6A51d8);
+        } 
+        else {
             // Deploy local WETH9 if on unknown chain (e.g., anvil)
             WETH9 weth9 = new WETH9();
             weth = IWETH(address(weth9));
