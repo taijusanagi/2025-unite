@@ -3,7 +3,7 @@ import {expect, jest} from '@jest/globals'
 
 import Sdk from '../sdk/evm/cross-chain-sdk-shims'
 import {parseUnits, randomBytes} from 'ethers'
-import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
+import {BN, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 
 import {Wallet} from '../sdk/evm/wallet'
 import {Resolver} from '../sdk/evm/resolver'
@@ -185,6 +185,14 @@ describe('evm', () => {
                 ESCROW_DST_IMPLEMENTATION
             )
             await increaseTime([evmSrc, evmDst], 11)
+
+            console.log('dstImmutables.build()', dstImmutables.build())
+            console.log('dstImmutables.build().timelocks', dstImmutables.build().timelocks)
+            console.log(
+                'privateWithdrawal',
+                Sdk.TimeLocks.fromBigInt(BigInt(dstImmutables.build().timelocks)).toDstTimeLocks().privateWithdrawal
+            )
+
             // User shares key after validation of dst escrow deployment
             console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
             await evmDstResolver.send(

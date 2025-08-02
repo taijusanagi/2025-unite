@@ -354,7 +354,6 @@ describe('btc', () => {
             console.log('\n🔓 Phase 2: Maker (user) claims HTLC using secret...')
 
             const spendPsbt = new bitcoin.Psbt({network})
-
             const rawTxHex = await await btcProvider.getRawTransactionHex(btcDstEscrowHash)
 
             spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal))

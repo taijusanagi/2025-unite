@@ -3,8 +3,14 @@ import { Resolver } from "@sdk/evm//resolver";
 import { Wallet } from "@sdk/evm//wallet";
 import { JsonRpcProvider } from "ethers";
 import { NextRequest, NextResponse } from "next/server";
+import * as bitcoin from "bitcoinjs-lib";
+import { BtcProvider } from "@sdk/btc";
+import Sdk from "@sdk/evm/cross-chain-sdk-shims";
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
+const btcPrivateKey = process.env.BTC_PRIVATE_KEY || "0x";
+
+const network = bitcoin.networks.testnet;
 
 export async function POST(
   req: NextRequest,
@@ -18,6 +24,7 @@ export async function POST(
     const {
       srcChainId,
       dstChainId,
+      order: _order,
       srcEscrowAddress,
       dstEscrowAddress,
       srcImmutables,
@@ -40,6 +47,8 @@ export async function POST(
       );
     }
 
+    const btcProvider = new BtcProvider(config[99999].rpc);
+
     const resolver = new Resolver(
       config[srcChainId].resolver!,
       config[dstChainId].resolver!
@@ -51,6 +60,73 @@ export async function POST(
     console.log("Withdraw in destination chain");
     if (config[srcChainId].type === "btc") {
       console.log("Destination chain: BTC");
+      console.log("dstImmutables", dstImmutables);
+
+      const spendPsbt = new bitcoin.Psbt({ network });
+      const rawTxHex = await await btcProvider.getRawTransactionHex(
+        dstEscrowAddress
+      );
+      const privateWithdrawal = Sdk.TimeLocks.fromBigInt(
+        BigInt(dstImmutables.timelocks)
+      ).toDstTimeLocks().privateWithdrawal;
+
+      // spendPsbt.setLocktime(privateWithdrawal);
+      // spendPsbt.addInput({
+      //   hash: dstEscrowAddress,
+      //   index: 0,
+      //   nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+      //   redeemScript: htlcScript,
+      //   sequence: 0xfffffffe, // Enable locktime
+      // });
+
+      // const redeemFee = 1000;
+      // const redeemValue = dstImmutables.amount - redeemFee;
+
+      // if (redeemValue <= 0) {
+      //   console.error(`❌ Not enough value to redeem HTLC.`);
+      //   return;
+      // }
+
+      // spendPsbt.addOutput({
+      //   address: btcUser.address!,
+      //   value: redeemValue,
+      // });
+
+      // spendPsbt.signInput(0, {
+      //   publicKey: btcUser.publicKey,
+      //   sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash)),
+      // });
+
+      // const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
+      //   const signature = input.partialSig[0].signature;
+
+      //   const unlockingScript = bitcoin.script.compile([
+      //     signature,
+      //     secret,
+      //     bitcoin.opcodes.OP_TRUE,
+      //   ]);
+
+      //   const payment = bitcoin.payments.p2sh({
+      //     redeem: {
+      //       input: unlockingScript,
+      //       output: htlcScript,
+      //     },
+      //   });
+
+      //   return {
+      //     finalScriptSig: payment.input,
+      //     finalScriptWitness: undefined,
+      //   };
+      // };
+
+      // spendPsbt.finalizeInput(0, htlcRedeemFinalizer);
+
+      // const finalTxHex = spendPsbt.extractTransaction().toHex();
+      // const finalTxId = await btcProvider.broadcastTx(finalTxHex);
+
+      // console.log("🎉 Maker successfully claimed BTC from HTLC!");
+      // console.log("✅ Redemption TXID:", finalTxId);
+
       dstWithdrawHash = "";
     } else {
       console.log("Destination chain: ETH");
