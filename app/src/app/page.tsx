@@ -317,13 +317,14 @@ export default function Home() {
       let signature = "";
 
       if (config[dstChainId].type == "btc") {
-        // const recipientAddress = publicKeyToAddress(
-        //   btcRecipientPublicKey,
-        //   bitcoin.networks.testnet
-        // );
-        // // @ts-ignore
-        // order.inner.inner.receiver =
-        //   addressToEthAddressFormat(recipientAddress);
+        const recipientAddress = publicKeyToAddress(
+          btcRecipientPublicKey,
+          bitcoin.networks.testnet
+        );
+        // @ts-ignore
+        order.inner.inner.receiver = new Address(
+          addressToEthAddressFormat(recipientAddress)
+        );
       }
 
       if (config[srcChainId].type == "btc") {
@@ -396,7 +397,7 @@ export default function Home() {
       const secretRes = await fetch(`/api/relayer/orders/${hash}/secret`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ secret }),
+        body: JSON.stringify({ secret: uint8ArrayToHex(secret) }),
       });
       if (!secretRes.ok) throw new Error("Failed to share secret");
       updateLastStatus("done");
