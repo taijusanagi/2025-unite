@@ -20,9 +20,13 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@sdk/*": ["../chains/sdk/*"],
+      "@1inch/byte-utils": ["./node_modules/@1inch/byte-utils"],
       "@1inch/cross-chain-sdk": ["./node_modules/@1inch/cross-chain-sdk"],
-      "ethers": ["./node_modules/ethers"]
+      "@sdk/*": ["../chains/sdk/*"],
+      "axios": ["./node_modules/axios"],
+      "ecpair": ["./node_modules/ecpair"],
+      "ethers": ["./node_modules/ethers"],
+      "tiny-secp256k1": ["./node_modules/tiny-secp256k1"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
