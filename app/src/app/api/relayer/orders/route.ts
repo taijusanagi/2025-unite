@@ -4,26 +4,38 @@ import redis, { connectRedis } from "@/lib/redis";
 
 export async function POST(req: Request) {
   try {
-    const { hash, srcChainId, dstChainId, order, extension, signature } =
-      await req.json();
-
-    if (
-      !hash ||
-      !srcChainId ||
-      !dstChainId ||
-      !order ||
-      !extension ||
-      !signature
-    ) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-    }
-
-    const payload = {
+    const {
+      hash,
+      hashLock,
       srcChainId,
       dstChainId,
       order,
       extension,
       signature,
+      btcUserPublicKey,
+    } = await req.json();
+
+    if (
+      !hash ||
+      !hashLock ||
+      !srcChainId ||
+      !dstChainId ||
+      !order ||
+      !extension ||
+      !signature ||
+      !btcUserPublicKey
+    ) {
+      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    }
+
+    const payload = {
+      hashLock,
+      srcChainId,
+      dstChainId,
+      order,
+      extension,
+      signature,
+      btcUserPublicKey,
       status: "order_created",
     };
 

@@ -1,19 +1,17 @@
 import 'dotenv/config'
 import {expect, jest} from '@jest/globals'
 
-import Sdk from '../sdk/evm/cross-chain-sdk-wrapper'
-console.log('Sdk', Sdk)
+import Sdk from '../sdk/evm/cross-chain-sdk-shims'
 import {parseUnits, randomBytes} from 'ethers'
-import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
+import {BN, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 
-import {Wallet} from './lib/evm/wallet'
-import {Resolver} from './lib/evm/resolver'
-import {EscrowFactory} from './lib/evm/escrow-factory'
+import {Wallet} from '../sdk/evm/wallet'
+import {Resolver} from '../sdk/evm/resolver'
+import {EscrowFactory} from '../sdk/evm/escrow-factory'
 
-import {getOrderHashWithPatch, patchedDomain} from './lib/evm/patch'
-import {getBalances, initChain, increaseTime} from './lib/evm/utils'
-import {Chain} from './lib/evm/types'
-import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
+import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
+import {getBalances, initChain, increaseTime, evmOwnerPk, evmResolverPk, evmUserPk} from './test-utils/evm'
+import {Chain} from './test-utils/evm'
 
 const {Address} = Sdk
 
@@ -146,32 +144,29 @@ describe('evm', () => {
             console.log(`[${srcChainId}]`, `Filling order ${orderHash}`)
             const fillAmount = order.makingAmount
 
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmSrcResolver.send(
+            const {txHash: orderFillHash, blockNumber: srcDeployBlockNumber} = await evmSrcResolver.send(
                 resolverContract.deploySrc(
                     srcChainId,
+                    evmSrc.lop,
                     order,
                     signature,
                     Sdk.TakerTraits.default()
                         .setExtension(order.extension)
                         .setAmountMode(Sdk.AmountMode.maker)
                         .setAmountThreshold(order.takingAmount),
-                    fillAmount,
-                    order.escrowExtension.hashLockInfo,
-                    evmSrc.lop
+                    fillAmount
                 )
             )
             console.log(`[${srcChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
-            const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlock)
+            const srcEscrowEvent = await srcFactory.getSrcDeployEvent(srcDeployBlockNumber)
             const dstImmutables = srcEscrowEvent[0]
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
 
-            console.log('dstImmutables', dstImmutables)
-            console.log('dstImmutables.build()', dstImmutables.build())
-            console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
             const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmDstResolver.send(
                 resolverContract.deployDst(dstImmutables)
             )
+
             console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
             const ESCROW_SRC_IMPLEMENTATION = await srcFactory.getSourceImpl()
             const ESCROW_DST_IMPLEMENTATION = await dstFactory.getDestinationImpl()
@@ -187,14 +182,20 @@ describe('evm', () => {
                 ESCROW_DST_IMPLEMENTATION
             )
             await increaseTime([evmSrc, evmDst], 11)
+
             // User shares key after validation of dst escrow deployment
             console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
             await evmDstResolver.send(
-                resolverContract.withdraw('dst', dstEscrowAddress, secret, dstImmutables.withDeployedAt(dstDeployedAt))
+                resolverContract.withdraw(
+                    'dst',
+                    dstEscrowAddress,
+                    secret,
+                    dstImmutables.withDeployedAt(dstDeployedAt).build()
+                )
             )
             console.log(`[${srcChainId}]`, `Withdrawing funds for resolver from ${srcEscrowAddress}`)
             const {txHash: resolverWithdrawHash} = await evmSrcResolver.send(
-                resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
+                resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0].build())
             )
             console.log(
                 `[${srcChainId}]`,

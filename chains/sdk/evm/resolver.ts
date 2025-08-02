@@ -1,6 +1,6 @@
 import {Interface, Signature, TransactionRequest} from 'ethers'
-import Sdk from '@1inch/cross-chain-sdk'
-import Contract from '../../../dist/contracts/evm/Resolver.sol/Resolver.json'
+import Sdk from './cross-chain-sdk-shims'
+import Contract from './contracts/Resolver.json'
 import {getOrderHashWithPatch, patchedDomain} from './patch'
 
 export class Resolver {
@@ -13,12 +13,14 @@ export class Resolver {
 
     public deploySrc(
         chainId: number,
+        lop: string,
+        //@ts-ignore
         order: Sdk.CrossChainOrder,
         signature: string,
+        //@ts-ignore
         takerTraits: Sdk.TakerTraits,
         amount: bigint,
-        hashLock = order.escrowExtension.hashLockInfo,
-        lop: string
+        hashLock = order.escrowExtension.hashLockInfo
     ): TransactionRequest {
         const {r, yParityAndS: vs} = Signature.from(signature)
         const {args, trait} = takerTraits.encode()
@@ -47,6 +49,7 @@ export class Resolver {
         /**
          * Immutables from SrcEscrowCreated event with complement applied
          */
+        //@ts-ignore
         immutables: Sdk.Immutables
     ): TransactionRequest {
         return {
@@ -61,20 +64,23 @@ export class Resolver {
 
     public withdraw(
         side: 'src' | 'dst',
+        //@ts-ignore
         escrow: Sdk.Address,
         secret: string,
+        //@ts-ignore
         immutables: Sdk.Immutables
     ): TransactionRequest {
         return {
             to: side === 'src' ? this.srcAddress : this.dstAddress,
-            data: this.iface.encodeFunctionData('withdraw', [escrow.toString(), secret, immutables.build()])
+            data: this.iface.encodeFunctionData('withdraw', [escrow.toString(), secret, immutables])
         }
     }
 
+    //@ts-ignore
     public cancel(side: 'src' | 'dst', escrow: Sdk.Address, immutables: Sdk.Immutables): TransactionRequest {
         return {
             to: side === 'src' ? this.srcAddress : this.dstAddress,
-            data: this.iface.encodeFunctionData('cancel', [escrow.toString(), immutables.build()])
+            data: this.iface.encodeFunctionData('cancel', [escrow.toString(), immutables])
         }
     }
 }

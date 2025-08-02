@@ -1,23 +1,25 @@
 import {execSync} from 'child_process'
-import {BITCOIN_CLI, broadcastTx, getUtxos, verifyHTLCScriptHashFromTx} from './lib/btc/utils'
+import {BITCOIN_CLI} from './test-utils/btc'
 import {expect, jest} from '@jest/globals'
 import Sdk from '@1inch/cross-chain-sdk'
 import * as bitcoin from 'bitcoinjs-lib'
-import axios from 'axios'
-import * as ecc from 'tiny-secp256k1'
-import {ECPairFactory, ECPairInterface} from 'ecpair'
+
 import {randomBytes} from 'crypto'
-import {Chain} from './lib/evm/types'
-import {Wallet} from './lib/evm/wallet'
-import {EscrowFactory} from './lib/evm/escrow-factory'
-import {getBalances as evmGetBalances, increaseTime, initChain, setDeployedAt} from './lib/evm/utils'
-import {getBalance as btcGetBalance} from './lib/btc/utils'
-import {evmOwnerPk, evmResolverPk, evmUserPk} from './lib/evm/default-keys'
+import {Chain} from './test-utils/evm'
+import {Wallet} from '../sdk/evm/wallet'
+import {EscrowFactory} from '../sdk/evm/escrow-factory'
+import {getBalances as evmGetBalances, increaseTime, initChain} from './test-utils/evm'
+
+import {evmOwnerPk, evmResolverPk, evmUserPk} from './test-utils/evm'
 import {parseUnits} from 'ethers'
-import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
-import {Resolver} from './lib/evm/resolver'
-import {getOrderHashWithPatch, patchedDomain} from './lib/evm/patch'
+import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
+import {Resolver} from '../sdk/evm/resolver'
+import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
+import {setDeployedAt} from '../sdk/evm/timelocks'
 import bip68 from 'bip68'
+import {walletFromWIF, addressToEthAddressFormat, createDstHtlcScript, createSrcHtlcScript} from '../sdk/btc'
+
+import {BtcProvider} from '../sdk/btc'
 
 const {Address} = Sdk
 
@@ -32,27 +34,13 @@ const nullAddress = '0x0000000000000000000000000000000000000000'
 
 describe('btc', () => {
     const network = bitcoin.networks.regtest
-    const API_BASE = 'http://localhost:8094/regtest/api'
+    const btcProvider = new BtcProvider('http://localhost:8094/regtest/api')
 
-    const ECPair = ECPairFactory(ecc)
+    const btcUser = walletFromWIF(btcUserPk, network)
+    const btcResolver = walletFromWIF(btcResolverPk, network)
 
-    const btcUserKeyPair: ECPairInterface = ECPair.fromWIF(btcUserPk, network)
-    const btcResolverKeyPair: ECPairInterface = ECPair.fromWIF(btcResolverPk, network)
-
-    const btcUserPubKey = Buffer.from(btcUserKeyPair.publicKey)
-    const btcResolverPubKey = Buffer.from(btcResolverKeyPair.publicKey)
-
-    const btcUserAddress = bitcoin.payments.p2wpkh({
-        pubkey: btcUserPubKey,
-        network
-    }).address
-    const btcResolverAddress = bitcoin.payments.p2wpkh({
-        pubkey: btcResolverPubKey,
-        network
-    }).address
-
-    console.log('btcUserAddress', btcUserAddress)
-    console.log('btcResolverAddress', btcResolverAddress)
+    console.log('btcUser.address', btcUser.address)
+    console.log('btcResolver.address', btcResolver.address)
 
     const evmChainId = 1
     const dummyBtcChainId = 137 // set dummy value this first
@@ -110,11 +98,11 @@ describe('btc', () => {
 
         btcMiningAddress = execSync(`${BITCOIN_CLI} -rpcwallet=mining_address getnewaddress`).toString().trim()
 
-        execSync(`${BITCOIN_CLI} setmocktime ${btcTimestamp}`)
+        // execSync(`${BITCOIN_CLI} setmocktime ${btcTimestamp}`)
         execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 101 ${btcMiningAddress}`)
         execSync(`sleep 5`)
 
-        const testAddresses = [btcUserAddress, btcResolverAddress]
+        const testAddresses = [btcUser.address, btcResolver.address]
 
         testAddresses.forEach((addr) => {
             execSync(`${BITCOIN_CLI} -rpcwallet=mining_address sendtoaddress ${addr} 1`)
@@ -138,16 +126,18 @@ describe('btc', () => {
 
     describe('evm -> btc', () => {
         it('should work', async () => {
+            console.log('\n========== 🛠️ Phase 1: CREATE ORDER ==========')
+
+            console.log('🔹 User makes order')
+
             const evmInitialBalances = await evmGetBalances([
                 {token: evm.weth, user: evmUser, resolver: evmResolverContract}
             ])
 
-            const btcUserInitialBalance = await btcGetBalance(btcUserAddress!) // maker
-            const btcResolverInitialBalance = await btcGetBalance(btcResolverAddress!) // taker
+            const btcUserInitialBalance = await btcProvider.getBalance(btcUser.address!)
+            const btcResolverInitialBalance = await btcProvider.getBalance(btcResolver.address!)
 
-            // // User creates order
             const secret = randomBytes(32)
-
             const hashLock = {
                 keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
                 sha256: bitcoin.crypto.sha256(secret)
@@ -204,84 +194,61 @@ describe('btc', () => {
             // patch
             // @ts-ignore
             order.inner.inner.takerAsset = new Address(evm.trueERC20)
-
-            const {data} = bitcoin.address.fromBech32(btcUserAddress!)
             // @ts-ignore
-            order.inner.inner.receiver = `0x${data.toString('hex')}`
+            order.inner.inner.receiver = addressToEthAddressFormat(btcUser.address!)
             // @ts-ignore
             order.inner.fusionExtension.dstChainId = btcChainId
 
-            console.log('order.build()', order.build())
-
             const signature = await evmUser.signOrder(evmChainId, order, evm.lop)
-
             const orderHash = getOrderHashWithPatch(evmChainId, order, {...patchedDomain, verifyingContract: evm.lop})
 
-            // // Resolver fills order
-            const resolverContract = new Resolver(evm.resolver, evm.resolver)
-            console.log(`[${evmChainId}]`, `Filling order ${orderHash}`)
-            const fillAmount = order.makingAmount
+            console.log('✅ Order created with hash:', orderHash)
 
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmResolver.send(
+            console.log('\n========== 🏗️ Phase 2: CREATE ESCROW ==========')
+            console.log('🔹 Resolver creates escrows on source chain (ETH)')
+
+            const resolverContract = new Resolver(evm.resolver, evm.resolver)
+            const fillAmount = order.makingAmount
+            console.log(`[${evmChainId}] 🧾 Filling order ${orderHash} with amount ${fillAmount}`)
+
+            const {txHash: orderFillHash, blockNumber: srcDeployBlockNumber} = await evmResolver.send(
                 resolverContract.deploySrc(
                     evmChainId,
+                    evm.lop,
                     order,
                     signature,
                     Sdk.TakerTraits.default()
                         .setExtension(order.extension)
                         .setAmountMode(Sdk.AmountMode.maker)
                         .setAmountThreshold(order.takingAmount),
-                    fillAmount,
-                    order.escrowExtension.hashLockInfo,
-                    evm.lop
+                    fillAmount
                 )
             )
-            console.log(`[${evmChainId}]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+            console.log(`[${evmChainId}] ✅ Order filled in tx ${orderFillHash}`)
 
-            const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
-
-            console.log('eth - srcEscrowEvent', srcEscrowEvent)
-
+            const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlockNumber)
             const dstImmutables = srcEscrowEvent[0]
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
-
-            console.log('eth - dstImmutables:', dstImmutables)
 
             const rebuiltAddress = bitcoin.address.toBech32(
                 Buffer.from(dstImmutables.maker.toString().slice(2), 'hex'),
                 0,
                 network.bech32
             )
-            expect(rebuiltAddress).toBe(btcUserAddress) // to make sure the btc user address is available on-chain
+            expect(rebuiltAddress).toBe(btcUser.address)
 
-            // ========================================
-            // 1️⃣ PHASE 1: Taker (resolver) creates HTLC and deposits BTC
-            // ========================================
-            console.log('🔐 Phase 1: Taker locking BTC into HTLC...')
+            console.log('🔹 Preparing destination chain (BTC) HTLC script')
 
-            // NOTE: secret is known to the maker — taker only knows the hash
             const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks()
-            const htlcScript = bitcoin.script.compile([
-                Buffer.from(hexToUint8Array(dstImmutables.hash())),
-                bitcoin.opcodes.OP_DROP,
-                bitcoin.script.number.encode(Number(dstTimeLocks.privateWithdrawal)),
-                bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-                bitcoin.opcodes.OP_DROP,
-                bitcoin.opcodes.OP_IF,
-                bitcoin.opcodes.OP_SHA256,
+            const htlcScript = createDstHtlcScript(
+                orderHash,
                 hashLock.sha256,
-                bitcoin.opcodes.OP_EQUALVERIFY,
-                btcUserPubKey, // 👤 Maker can claim with secret
-                bitcoin.opcodes.OP_CHECKSIG,
-                bitcoin.opcodes.OP_ELSE,
-                bitcoin.script.number.encode(Number(dstTimeLocks.privateCancellation)),
-                bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-                bitcoin.opcodes.OP_DROP,
-                btcResolverPubKey, // 👤 Taker can refund after timeout
-                bitcoin.opcodes.OP_CHECKSIG,
-                bitcoin.opcodes.OP_ENDIF
-            ])
+                dstTimeLocks.privateWithdrawal,
+                dstTimeLocks.privateCancellation,
+                btcUser.publicKey,
+                btcResolver.publicKey
+            )
 
             const p2sh = bitcoin.payments.p2sh({
                 redeem: {output: htlcScript, network},
@@ -290,14 +257,13 @@ describe('btc', () => {
 
             console.log('✅ HTLC P2SH Address:', p2sh.address)
 
-            // === Taker (resolver) funds the HTLC ===
-            const utxos = await getUtxos(btcResolverAddress!)
+            const utxos = await btcProvider.getUtxos(btcResolver.address!)
             if (!utxos.length) {
                 console.error('❌ No UTXOs available to fund HTLC.')
                 return
             }
 
-            const amount = Number(order.takingAmount) // Match maker's amount or adjust as needed
+            const amount = Number(order.takingAmount)
             const fee = 10000
             const totalInput = utxos.reduce((sum, u) => sum + u.value, 0)
             const change = totalInput - amount - fee
@@ -314,7 +280,7 @@ describe('btc', () => {
                     hash: utxo.txid,
                     index: utxo.vout,
                     witnessUtxo: {
-                        script: bitcoin.payments.p2wpkh({pubkey: btcResolverPubKey, network}).output!,
+                        script: bitcoin.payments.p2wpkh({pubkey: btcResolver.publicKey, network}).output!,
                         value: utxo.value
                     }
                 })
@@ -327,48 +293,39 @@ describe('btc', () => {
 
             if (change > 0) {
                 psbt.addOutput({
-                    address: btcResolverAddress!, // refund to self
+                    address: btcResolver.address!, // refund to self
                     value: change
                 })
             }
 
             utxos.forEach((_, idx) => {
                 psbt.signInput(idx, {
-                    publicKey: btcResolverPubKey,
-                    sign: (hash) => Buffer.from(btcResolverKeyPair.sign(hash))
+                    publicKey: btcResolver.publicKey,
+                    sign: (hash) => Buffer.from(btcResolver.keyPair.sign(hash))
                 })
             })
 
             psbt.finalizeAllInputs()
 
             const txHex = psbt.extractTransaction().toHex()
-            const btcDstEscrowHash = await broadcastTx(txHex)
+            const btcDstEscrowHash = await btcProvider.broadcastTx(txHex)
 
-            console.log('✅ Taker has funded HTLC:')
+            console.log('✅ HTLC funded on BTC chain')
             console.log('🔗 btcDstEscrowHash:', btcDstEscrowHash)
 
-            // relayer side
-            // check src escrow
-            const ESCROW_SRC_IMPLEMENTATION = await evmFactory.getSourceImpl()
-            const evmSrcEscrowAddress = new Sdk.EscrowFactory(new Address(evm.escrowFactory)).getSrcEscrowAddress(
-                srcEscrowEvent[0],
-                ESCROW_SRC_IMPLEMENTATION
-            )
+            console.log('\n========== 💸 Phase 3: WITHDRAW ==========')
+            console.log('🔹 User (Maker) withdraws BTC from HTLC on destination (Bitcoin) chain')
 
-            // check dst escrow
-            await verifyHTLCScriptHashFromTx(btcDstEscrowHash, htlcScript)
+            // Ensure HTLC on BTC chain is valid
+            await btcProvider.verifyHTLCScriptHashFromTx(btcDstEscrowHash, htlcScript)
 
-            // verify src
+            // Simulate time passage to enable locktime
             await increaseTime([evm], 11)
 
-            // ========================================
-            // 2️⃣ PHASE 2: Maker claims BTC using secret
-            // ========================================
-            console.log('\n🔓 Phase 2: Maker (user) claims HTLC using secret...')
-
+            // Prepare Bitcoin HTLC redeem transaction
             const spendPsbt = new bitcoin.Psbt({network})
+            const rawTxHex = await btcProvider.getRawTransactionHex(btcDstEscrowHash)
 
-            const rawTxHex = (await axios.get(`${API_BASE}/tx/${btcDstEscrowHash}/hex`)).data
             spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal))
             spendPsbt.addInput({
                 hash: btcDstEscrowHash,
@@ -386,16 +343,19 @@ describe('btc', () => {
                 return
             }
 
+            // Send BTC to the user (maker)
             spendPsbt.addOutput({
-                address: btcUserAddress!,
+                address: btcUser.address!,
                 value: redeemValue
             })
 
+            // User signs the input to claim funds
             spendPsbt.signInput(0, {
-                publicKey: btcUserPubKey,
-                sign: (hash) => Buffer.from(btcUserKeyPair.sign(hash))
+                publicKey: btcUser.publicKey,
+                sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash))
             })
 
+            // Finalize the input with the unlocking script
             const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
                 const signature = input.partialSig[0].signature
 
@@ -417,37 +377,43 @@ describe('btc', () => {
             spendPsbt.finalizeInput(0, htlcRedeemFinalizer)
 
             const finalTxHex = spendPsbt.extractTransaction().toHex()
-            const finalTxId = await broadcastTx(finalTxHex)
+            const finalTxId = await btcProvider.broadcastTx(finalTxHex)
 
-            console.log('🎉 Maker successfully claimed BTC from HTLC!')
-            console.log('✅ Redemption TXID:', finalTxId)
+            console.log('🎉 User (Maker) successfully claimed BTC from HTLC!')
+            console.log('✅ BTC Redemption TXID:', finalTxId)
 
-            console.log(`[${evmChainId}]`, `Withdrawing funds for resolver from ${evmSrcEscrowAddress}`)
+            console.log('\n🔹 Resolver (Taker) withdraws ETH from escrow on source (EVM) chain')
+
+            const ESCROW_SRC_IMPLEMENTATION = await evmFactory.getSourceImpl()
+            const evmSrcEscrowAddress = new Sdk.EscrowFactory(new Address(evm.escrowFactory)).getSrcEscrowAddress(
+                srcEscrowEvent[0],
+                ESCROW_SRC_IMPLEMENTATION
+            )
+
+            console.log(`[${evmChainId}] 🔓 Withdrawing from escrow: ${evmSrcEscrowAddress}`)
+
             const {txHash: resolverWithdrawHash} = await evmResolver.send(
-                resolverContract.withdraw('src', evmSrcEscrowAddress, uint8ArrayToHex(secret), srcEscrowEvent[0])
+                resolverContract.withdraw(
+                    'src',
+                    evmSrcEscrowAddress,
+                    uint8ArrayToHex(secret),
+                    srcEscrowEvent[0].build()
+                )
             )
 
-            console.log(
-                `[${evmChainId}]`,
-                `Withdrew funds for resolver from ${evmSrcEscrowAddress} to ${evm.resolver} in tx ${resolverWithdrawHash}`
-            )
+            console.log(`[${evmChainId}] ✅ ETH Withdrawal TXID: ${resolverWithdrawHash}`)
 
+            // Check ETH balances after withdrawal
             const evmResultBalances = await evmGetBalances([
                 {token: evm.weth, user: evmUser, resolver: evmResolverContract}
             ])
 
-            // user transferred funds to resolver on evm chain
             expect(evmInitialBalances[0].user - evmResultBalances[0].user).toBe(order.makingAmount)
             expect(evmResultBalances[0].resolver - evmInitialBalances[0].resolver).toBe(order.makingAmount)
 
-            const btcUserResultBalance = await btcGetBalance(btcUserAddress!) // maker
-            const btcResolverResultBalance = await btcGetBalance(btcResolverAddress!) // takerr
-
-            console.log('btcUserInitialBalance', btcUserInitialBalance)
-            console.log('btcResolverInitialBalance', btcResolverInitialBalance)
-
-            console.log('btcUserResultBalance', btcUserResultBalance)
-            console.log('btcResolverResultBalance', btcResolverResultBalance)
+            // Check BTC balances after user withdrawal
+            const btcUserResultBalance = await btcProvider.getBalance(btcUser.address!)
+            const btcResolverResultBalance = await btcProvider.getBalance(btcResolver.address!)
 
             expect(btcUserResultBalance - btcUserInitialBalance).toBe(redeemValue)
             expect(btcResolverInitialBalance - btcResolverResultBalance).toBe(amount + fee)
@@ -456,10 +422,14 @@ describe('btc', () => {
 
     describe('btc -> evm', () => {
         it('should work', async () => {
-            // ========================================
-            // 1️⃣ PHASE 1: Maker creates HTLC and fully signs TX
-            // ========================================
-            console.log('🔐 Phase 1: Maker creating HTLC and signed funding TX...')
+            const evmInitialBalances = await evmGetBalances([
+                {token: evm.weth, user: evmUser, resolver: evmResolverContract}
+            ])
+            const btcUserInitialBalance = await btcProvider.getBalance(btcUser.address!)
+            const btcResolverInitialBalance = await btcProvider.getBalance(btcResolver.address!)
+
+            console.log('\n========== 🛠️ Phase 1: CREATE ORDER ==========')
+            console.log('🔹 User creates and funds an HTLC on the source chain (BTC)')
 
             const secret = randomBytes(32)
 
@@ -468,28 +438,28 @@ describe('btc', () => {
                 sha256: bitcoin.crypto.sha256(secret)
             }
 
-            const {data} = bitcoin.address.fromBech32(btcUserAddress!)
+            const lockInSeconds = 512 // Your desired lock time
 
             // use sdk to make order object
             const order = Sdk.CrossChainOrder.new(
-                new Address(evm.escrowFactory),
+                new Address(nullAddress),
                 {
                     salt: Sdk.randBigInt(1000n),
-                    maker: new Address(`0x${bitcoin.address.fromBech32(btcUserAddress!).data.toString('hex')}`),
+                    maker: new Address(addressToEthAddressFormat(btcUser.address!)),
                     makingAmount: 10000n,
                     takingAmount: 9999n,
-                    makerAsset: new Address(evm.trueERC20), // ths is dummy now
+                    makerAsset: new Address(nullAddress), // ths is dummy now
                     takerAsset: new Address(evm.weth),
                     receiver: new Address(await evmUser.getAddress())
                 },
                 {
                     hashLock: hashLock.keccak256,
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 512n, // about 1 blocks, must be 512, 1024, 1536...
+                        srcWithdrawal: BigInt(lockInSeconds), // about 1 blocks, must be 512, 1024, 1536...
                         srcPublicWithdrawal: 1535n, // not used
                         srcCancellation: 1536n, // about 2 blocks, must be 512, 1024, 1536...
                         srcPublicCancellation: 1537n, // not used
-                        dstWithdrawal: 512n, // adjust with btc
+                        dstWithdrawal: BigInt(lockInSeconds), // adjust with btc
                         dstPublicWithdrawal: 1024n, // 100sec private withdrawal
                         dstCancellation: 1025n // 1sec public withdrawal
                     }),
@@ -507,7 +477,7 @@ describe('btc', () => {
                     }),
                     whitelist: [
                         {
-                            address: new Address(evm.resolver),
+                            address: new Address(nullAddress),
                             allowFrom: 0n
                         }
                     ],
@@ -530,53 +500,33 @@ describe('btc', () => {
             })
             // @ts-ignore
             const timeLocks = order.inner.fusionExtension.timeLocks
-
-            const lockInSeconds = 512 // Your desired lock time
             const sequenceValue = bip68.encode({seconds: lockInSeconds, blocks: undefined})
-            const htlcScript = bitcoin.script.compile([
-                Buffer.from(hexToUint8Array(orderHash)), // include orderhash here to maker sign it
-                bitcoin.opcodes.OP_DROP,
-                // bitcoin.script.number.encode(
-                //     bip68.encode({seconds: Number(timeLocks._srcWithdrawal), blocks: undefined})
-                // ),
-                // bitcoin.script.number.encode(10),
-                bitcoin.script.number.encode(sequenceValue),
-                bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
-                bitcoin.opcodes.OP_DROP,
-                bitcoin.opcodes.OP_IF,
-                bitcoin.opcodes.OP_SHA256,
+            const htlcScript = createSrcHtlcScript(
+                orderHash,
                 hashLock.sha256,
-                bitcoin.opcodes.OP_EQUALVERIFY,
-                btcResolverPubKey,
-                bitcoin.opcodes.OP_CHECKSIG,
-                bitcoin.opcodes.OP_ELSE,
-                bitcoin.script.number.encode(
-                    bip68.encode({seconds: Number(timeLocks._srcCancellation), blocks: undefined})
-                ),
-                bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
-                bitcoin.opcodes.OP_DROP,
-                btcUserPubKey,
-                bitcoin.opcodes.OP_CHECKSIG,
-                bitcoin.opcodes.OP_ENDIF
-            ])
+                timeLocks._srcWithdrawal,
+                timeLocks._srcCancellation,
+                btcUser.publicKey,
+                btcResolver.publicKey,
+                false
+            )
 
             const p2sh = bitcoin.payments.p2sh({
                 redeem: {output: htlcScript, network},
                 network
             })
 
-            console.log('✅ HTLC P2SH Address:', p2sh.address)
+            console.log('🧾 HTLC P2SH Address:', p2sh.address)
 
             // 👤 Maker's P2WPKH funding
             const makerPayment = bitcoin.payments.p2wpkh({
-                pubkey: btcUserPubKey,
+                pubkey: btcUser.publicKey,
                 network
             })
 
             const fromAddress = makerPayment.address!
-            console.log('🔗 Maker Funding Address:', fromAddress)
 
-            const utxos = await getUtxos(fromAddress)
+            const utxos = await btcProvider.getUtxos(fromAddress)
             if (!utxos.length) {
                 console.error("❌ No UTXOs found in maker's wallet.")
                 return
@@ -588,7 +538,7 @@ describe('btc', () => {
             const change = totalInput - amount - fee
 
             if (change < 0) {
-                console.error('❌ Not enough funds to lock 10 sats and cover the fee.')
+                console.error('❌ Not enough funds to lock BTC and cover the fee.')
                 return
             }
 
@@ -619,8 +569,8 @@ describe('btc', () => {
 
             utxos.forEach((_, idx) => {
                 psbt.signInput(idx, {
-                    publicKey: btcUserPubKey,
-                    sign: (hash) => Buffer.from(btcUserKeyPair.sign(hash))
+                    publicKey: btcUser.publicKey,
+                    sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash))
                 })
             })
 
@@ -628,100 +578,44 @@ describe('btc', () => {
 
             const txHex = psbt.extractTransaction().toHex()
 
-            // 💾 Save fully signed TX and order details
             const btcOrder = {
                 txHex,
                 htlcScriptHex: htlcScript.toString('hex'),
                 p2shAddress: p2sh.address!
-                // valueSats: amount
-                // lockTime,
-                // hash: hash.toString('hex'),
-                // createdAt: new Date().toISOString()
             }
 
             const orderJson = JSON.stringify(btcOrder, null, 2)
-            console.log('📦 Maker created and signed order JSON:\n', orderJson)
+            console.log('📦 Maker created and signed order transaction:\n', orderJson)
+            console.log('✅ Order created and funded on BTC by the user')
 
-            // ========================================
-            // 2️⃣ PHASE 2: Taker receives order, broadcasts
-            // ========================================
-            console.log('\n📥 Phase 2: Resolver receives signed TX and broadcasts...')
+            console.log('\n========== 🏗️ Phase 2: CREATE ESCROW ==========')
+            console.log(
+                '🔹 Resolver broadcasts the funding transaction and creates an escrow on the destination chain (EVM)'
+            )
 
             const loaded = JSON.parse(orderJson)
 
-            console.log('HTLC address:', loaded.p2shAddress)
-            const htlcUtxos2 = await getUtxos(loaded.p2shAddress)
-            console.log('Found HTLC UTXOs:', htlcUtxos2)
+            const txid = await btcProvider.broadcastTx(loaded.txHex)
+            console.log('🔗 Broadcasting BTC funding TX:', txid)
 
-            const txid = await broadcastTx(loaded.txHex)
-            console.log('✅ HTLC Funding TX Broadcasted:', txid)
-
-            console.log('⏳ Advancing Bitcoin time to satisfy the relative time lock...')
-
-            // 2. Mine a new block to confirm this new time
             console.log('⛏️ Mining a block to confirm the funding transaction...')
             execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 1 ${btcMiningAddress}`)
             execSync('sleep 2')
 
-            // get confirmed time
-            const txDetails = (await axios.get(`${API_BASE}/tx/${txid}`)).data
-            const blockHeight = txDetails.status.block_height
-            const blockDetails = (await axios.get(`${API_BASE}/block-height/${blockHeight}`)).data
-            const blockHash = blockDetails
-            const blockInfo = (await axios.get(`${API_BASE}/block/${blockHash}`)).data
-            const confirmedTime = blockInfo.timestamp
-
-            console.log('⏱️ Confirmed BTC HTLC funding time:', confirmedTime)
-
-            // IBaseEscrow.Immutables memory immutables = IBaseEscrow.Immutables({
-            //     orderHash: orderHash,
-            //     hashlock: hashlock,
-            //     maker: order.maker,
-            //     taker: Address.wrap(uint160(taker)),
-            //     token: order.makerAsset,
-            //     amount: makingAmount,
-            //     safetyDeposit: extraDataArgs.deposits >> 128,
-            //     timelocks: extraDataArgs.timelocks.setDeployedAt(block.timestamp)
-            // });
-
-            // DstImmutablesComplement memory immutablesComplement = DstImmutablesComplement({
-            //     maker: order.receiver.get() == address(0) ? order.maker : order.receiver,
-            //     amount: takingAmount,
-            //     token: extraDataArgs.dstToken,
-            //     safetyDeposit: extraDataArgs.deposits & type(uint128).max,
-            //     chainId: extraDataArgs.dstChainId
-            // });
-
-            // (Sdk.Immutables.new({
-            //     orderHash: immutables[0],
-            //     hashLock: Sdk.HashLock.fromString(immutables[1]),
-            //     maker: Sdk.Address.fromBigInt(immutables[2]),
-            //     taker: Sdk.Address.fromBigInt(immutables[3]),
-            //     token: Sdk.Address.fromBigInt(immutables[4]),
-            //     amount: immutables[5],
-            //     safetyDeposit: immutables[6],
-            //     timeLocks: Sdk.TimeLocks.fromBigInt(immutables[7])
-            // }),
-            //     Sdk.DstImmutablesComplement.new({
-            //         maker: Sdk.Address.fromBigInt(complement[0]),
-            //         amount: complement[1],
-            //         token: Sdk.Address.fromBigInt(complement[2]),
-            //         safetyDeposit: complement[3]
-            //     }))
-
-            console.log('order.maker', order.maker)
+            const {confirmedAt} = await btcProvider.waitForTxConfirmation(txid)
+            console.log('⏱️ Confirmed BTC HTLC funding time:', confirmedAt)
 
             const srcEscrowEvent = [
                 Sdk.Immutables.new({
                     orderHash: orderHash,
                     hashLock: hashLock.keccak256,
                     maker: order.maker,
-                    taker: new Address(`0x${bitcoin.address.fromBech32(btcResolverAddress!).data.toString('hex')}`),
+                    taker: new Address(`0x${bitcoin.address.fromBech32(btcResolver.address!).data.toString('hex')}`),
                     token: order.makerAsset,
                     amount: order.makingAmount,
                     // @ts-ignore
                     safetyDeposit: order.inner.fusionExtension.srcSafetyDeposit,
-                    timeLocks: Sdk.TimeLocks.fromBigInt(setDeployedAt(timeLocks.build(), confirmedTime))
+                    timeLocks: Sdk.TimeLocks.fromBigInt(setDeployedAt(timeLocks.build(), BigInt(confirmedAt)))
                 }),
                 Sdk.DstImmutablesComplement.new({
                     maker: order.receiver,
@@ -737,27 +631,26 @@ describe('btc', () => {
                 .withTaker(new Sdk.Address(await evmResolverContract.getAddress()))
 
             const resolverContract = new Resolver(evm.resolver, evm.resolver)
-            console.log(`[${evmChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
+            console.log(`[${evmChainId}] 🧾 Filling order ${orderHash} by creating escrow on EVM`)
             const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmResolver.send(
                 resolverContract.deployDst(dstImmutables)
             )
-            console.log(`[${evmChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
+            console.log(`[${evmChainId}] ✅ Created EVM escrow for order ${orderHash} in tx ${dstDepositHash}`)
 
-            // B. Advance the node's clock PAST the lock time.
-            console.log('⏳ Advancing Bitcoin time to satisfy the relative time lock...')
+            console.log('\n========== 💸 Phase 3: WITHDRAW ==========')
+            console.log('🔹 Resolver facilitates User (Maker) withdrawal from escrow on destination (EVM) chain')
+
             const latestBlockHeader = JSON.parse(
                 execSync(`${BITCOIN_CLI} getblockheader $(${BITCOIN_CLI} getbestblockhash)`).toString().trim()
             )
             const newTime = latestBlockHeader.time + lockInSeconds + 100 // Add a buffer
             execSync(`${BITCOIN_CLI} setmocktime ${newTime}`)
 
-            // C. Mine ANOTHER block to "lock in" the new time.
             console.log('⛏️ Mining a final block to lock in the new time...')
             execSync(`${BITCOIN_CLI} -rpcwallet=mining_address generatetoaddress 10 ${btcMiningAddress}`)
             execSync('sleep 2')
 
-            // check finality
-            await verifyHTLCScriptHashFromTx(txid, htlcScript)
+            await btcProvider.verifyHTLCScriptHashFromTx(txid, htlcScript)
             const ESCROW_DST_IMPLEMENTATION = await evmFactory.getDestinationImpl()
             const dstEscrowAddress = new Sdk.EscrowFactory(new Address(evm.escrowFactory)).getDstEscrowAddress(
                 srcEscrowEvent[0],
@@ -767,25 +660,23 @@ describe('btc', () => {
                 ESCROW_DST_IMPLEMENTATION
             )
 
-            console.log(`[${evmChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
+            console.log(`[${evmChainId}] 🔓 Withdrawing from EVM escrow for user: ${dstEscrowAddress}`)
 
             await increaseTime([evm], 1000)
 
-            await evmResolver.send(
+            const {txHash: userWithdrawHash} = await evmResolver.send(
                 resolverContract.withdraw(
                     'dst',
                     dstEscrowAddress,
                     uint8ArrayToHex(secret),
-                    dstImmutables.withDeployedAt(dstDeployedAt)
+                    dstImmutables.withDeployedAt(dstDeployedAt).build()
                 )
             )
+            console.log(`[${evmChainId}] ✅ ETH Withdrawal for User TXID: ${userWithdrawHash}`)
 
-            // ========================================
-            // 3️⃣ PHASE 3: Resolver redeems HTLC using secret
-            // ========================================
-            console.log('\n🔓 Phase 3: Resolver redeems HTLC with secret...')
+            console.log('\n🔹 Resolver (Taker) withdraws BTC from HTLC on source (Bitcoin) chain')
 
-            const htlcUtxos = await getUtxos(loaded.p2shAddress)
+            const htlcUtxos = await btcProvider.getUtxos(loaded.p2shAddress)
             if (!htlcUtxos.length) {
                 console.error('❌ No UTXOs found at HTLC address.')
                 return
@@ -794,16 +685,16 @@ describe('btc', () => {
             const htlcScriptBuffer = Buffer.from(loaded.htlcScriptHex, 'hex')
             const htlcUtxo = htlcUtxos[0]
 
-            const rawTxHex = (await axios.get(`${API_BASE}/tx/${htlcUtxo.txid}/hex`)).data
+            const rawTxHex = await btcProvider.getRawTransactionHex(htlcUtxo.txid)
 
             const spendPsbt = new bitcoin.Psbt({network})
-            spendPsbt.setVersion(2)
+            // spendPsbt.setVersion(2)
             spendPsbt.addInput({
                 hash: htlcUtxo.txid,
                 index: htlcUtxo.vout,
                 nonWitnessUtxo: Buffer.from(rawTxHex, 'hex'),
-                redeemScript: htlcScriptBuffer,
-                sequence: sequenceValue
+                redeemScript: htlcScriptBuffer
+                // sequence: sequenceValue
             })
 
             const redeemFee = 1000
@@ -815,31 +706,23 @@ describe('btc', () => {
             }
 
             spendPsbt.addOutput({
-                address: btcResolverAddress!,
+                address: btcResolver.address!,
                 value: redeemValue
             })
 
-            // Sign the input. This generates the signature and stores it in the PSBT.
             spendPsbt.signInput(0, {
-                publicKey: Buffer.from(btcResolverKeyPair.publicKey),
-                sign: (hash) => Buffer.from(btcResolverKeyPair.sign(hash))
+                publicKey: Buffer.from(btcResolver.keyPair.publicKey),
+                sign: (hash) => Buffer.from(btcResolver.keyPair.sign(hash))
             })
 
-            // This custom finalizer function assembles the correct scriptSig.
             const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
                 const signature = input.partialSig[0].signature
-
-                // This is the "unlocking" script. It provides the data needed
-                // to satisfy the OP_IF branch of your HTLC redeem script.
-                // It must contain, in order: signature, secret, and OP_TRUE.
                 const unlockingScript = bitcoin.script.compile([
                     signature,
                     secret, // The secret must be a Buffer
                     bitcoin.opcodes.OP_TRUE
                 ])
 
-                // Use the payments utility to create the final scriptSig, which correctly
-                // combines the unlocking data with the redeem script itself.
                 const payment = bitcoin.payments.p2sh({
                     redeem: {
                         input: unlockingScript,
@@ -853,15 +736,33 @@ describe('btc', () => {
                 }
             }
 
-            // Finalize the input using our custom logic.
             spendPsbt.finalizeInput(0, htlcRedeemFinalizer)
 
-            // Extract and broadcast the final, valid transaction.
             const finalTxHex = spendPsbt.extractTransaction().toHex()
-            const finalTxId = await broadcastTx(finalTxHex)
+            const finalTxId = await btcProvider.broadcastTx(finalTxHex)
 
-            console.log('🎉 Resolver has claimed the HTLC!')
+            console.log('🎉 Resolver has successfully claimed the BTC from the HTLC!')
             console.log('✅ Final Redeem TXID:', finalTxId)
+
+            const evmResultBalances = await evmGetBalances([
+                {token: evm.weth, user: evmUser, resolver: evmResolverContract}
+            ])
+
+            // User (receiver) should have received the taking amount
+            expect(evmResultBalances[0].user - evmInitialBalances[0].user).toBe(order.takingAmount)
+            // Resolver should have spent the taking amount
+            expect(evmInitialBalances[0].resolver - evmResultBalances[0].resolver).toBe(order.takingAmount)
+            console.log('✅ EVM balances are correct.')
+
+            // Check BTC balances after withdrawal
+            const btcUserResultBalance = await btcProvider.getBalance(btcUser.address!)
+            const btcResolverResultBalance = await btcProvider.getBalance(btcResolver.address!)
+
+            // BTC User (maker) should have spent the making amount + fee
+            expect(btcUserInitialBalance - btcUserResultBalance).toBe(amount + fee)
+            // BTC Resolver (taker) should have received the making amount - redeem fee
+            expect(btcResolverResultBalance - btcResolverInitialBalance).toBe(redeemValue)
+            console.log('✅ BTC balances are correct.')
         })
     })
 })

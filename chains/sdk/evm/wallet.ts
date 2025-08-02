@@ -1,7 +1,7 @@
 import {AbiCoder, Contract, JsonRpcProvider, Signer, TransactionRequest, Wallet as PKWallet} from 'ethers'
 import Sdk from '@1inch/cross-chain-sdk'
-import ERC20 from '../../../dist/contracts/evm/IERC20.sol/IERC20.json'
-import WETH from '../../../dist/contracts/evm/IWETH.sol/IWETH.json'
+import ERC20 from './contracts/IERC20.json'
+import WETH from './contracts/IWETH.json'
 
 const coder = AbiCoder.defaultAbiCoder()
 
@@ -102,18 +102,47 @@ export class Wallet {
         )
     }
 
-    async send(param: TransactionRequest): Promise<{txHash: string; blockTimestamp: bigint; blockHash: string}> {
-        const res = await this.signer.sendTransaction({...param, gasLimit: 10_000_000, from: this.getAddress()})
+    async send(
+        param: TransactionRequest
+    ): Promise<{txHash: string; blockNumber: number; blockTimestamp: bigint; blockHash: string}> {
+        const res = await this.signer.sendTransaction({
+            ...param,
+            // gasLimit: 500_000,
+            from: this.getAddress()
+        })
+
         const receipt = await res.wait(1)
 
         if (receipt && receipt.status) {
+            // Retry logic to safely fetch block
+            const block = await this.getBlockWithRetry(receipt)
+            if (!block) throw new Error('Block not found for transaction receipt.')
+
             return {
                 txHash: receipt.hash,
-                blockTimestamp: BigInt((await res.getBlock())!.timestamp),
-                blockHash: res.blockHash as string
+                blockNumber: block.number,
+                blockTimestamp: BigInt(block.timestamp),
+                blockHash: receipt.blockHash as string
             }
         }
 
         throw new Error((await receipt?.getResult()) || 'unknown error')
+    }
+
+    private async getBlockWithRetry(receipt: any, retries = 10, delayMs = 5000) {
+        for (let i = 0; i < retries; i++) {
+            console.log(`Attempt ${i + 1}/${retries}: fetching block for tx ${receipt?.hash || 'unknown'}`)
+            try {
+                const block = await this.provider.getBlock(receipt.blockNumber)
+                if (block) return block
+            } catch (err) {
+                console.warn(`getBlock attempt ${i + 1} failed:`, err)
+            }
+            if (i < retries - 1) {
+                console.log(`Retrying in ${delayMs}ms...`)
+                await new Promise((res) => setTimeout(res, delayMs))
+            }
+        }
+        return null
     }
 }
