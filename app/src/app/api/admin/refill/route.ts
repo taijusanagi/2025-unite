@@ -23,6 +23,9 @@ export async function GET(req: NextRequest) {
   const results: Record<string, string> = {};
 
   for (const [chainIdStr, chain] of Object.entries(config)) {
+    if (chain.type != "evm") {
+      continue;
+    }
     const chainId = Number(chainIdStr);
     const label = `chain:${chainId}`;
     console.log(`\n[${label}] Starting process...`);
@@ -32,15 +35,19 @@ export async function GET(req: NextRequest) {
       const provider = new JsonRpcProvider(chain.rpc);
       const wallet = new Wallet(privateKey, provider);
 
-      const WETH = new Contract(chain.wrappedNative, IWETHContract.abi, wallet);
+      const WETH = new Contract(
+        chain.wrappedNative!,
+        IWETHContract.abi,
+        wallet
+      );
       const Resolver = new Contract(
-        chain.resolver,
+        chain.resolver!,
         ResolverContract.abi,
         wallet
       );
 
       console.log(`[${label}] Checking ETH balance of resolver...`);
-      const resolverETHBalance = await provider.getBalance(chain.resolver);
+      const resolverETHBalance = await provider.getBalance(chain.resolver!);
       console.log(
         `[${label}] Resolver ETH balance: ${resolverETHBalance.toString()}`
       );

@@ -98,8 +98,10 @@ export async function POST(
 
       const htlcUtxo = htlcUtxos[0];
       const rawTxHex = await btcProvider.getRawTransactionHex(htlcUtxo.txid);
+      console.log("htlcScript", htlcScript);
+      console.log("secret", secret);
       const htlcScriptBuffer = Buffer.from(htlcScript, "hex");
-      const secretBuffer = Buffer.from(secret, "hex");
+      const secretBuffer = Buffer.from(secret.slice(2), "hex");
 
       const resolverPubKeyHex = btcResolver.keyPair.publicKey.toString();
       const scriptContainsResolverKey = htlcScript.includes(
