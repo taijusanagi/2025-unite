@@ -8,13 +8,14 @@ import {randomBytes} from 'crypto'
 import {Chain} from './test-utils/evm'
 import {Wallet} from '../sdk/evm/wallet'
 import {EscrowFactory} from '../sdk/evm/escrow-factory'
-import {getBalances as evmGetBalances, increaseTime, initChain, setDeployedAt} from './test-utils/evm'
+import {getBalances as evmGetBalances, increaseTime, initChain} from './test-utils/evm'
 
 import {evmOwnerPk, evmResolverPk, evmUserPk} from './test-utils/evm'
 import {parseUnits} from 'ethers'
-import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
+import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from '../sdk/evm/resolver'
 import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
+import {setDeployedAt} from '../sdk/evm/timelocks'
 import bip68 from 'bip68'
 import {walletFromWIF, addressToEthAddressFormat, createDstHtlcScript, createSrcHtlcScript} from '../sdk/btc'
 
@@ -614,7 +615,7 @@ describe('btc', () => {
                     amount: order.makingAmount,
                     // @ts-ignore
                     safetyDeposit: order.inner.fusionExtension.srcSafetyDeposit,
-                    timeLocks: Sdk.TimeLocks.fromBigInt(setDeployedAt(timeLocks.build(), confirmedAt))
+                    timeLocks: Sdk.TimeLocks.fromBigInt(setDeployedAt(timeLocks.build(), BigInt(confirmedAt)))
                 }),
                 Sdk.DstImmutablesComplement.new({
                     maker: order.receiver,

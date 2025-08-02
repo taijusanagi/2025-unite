@@ -434,15 +434,11 @@ export default function Home() {
 
         const txHex = psbt.extractTransaction().toHex();
         // The script includes orderhash, and tx is signed so use this object as signautre
-        signature = JSON.stringify(
-          {
-            txHex,
-            htlcScriptHex: htlcScript.toString("hex"),
-            p2shAddress: p2sh.address!,
-          },
-          null,
-          2
-        );
+        signature = JSON.stringify({
+          txHex,
+          htlcScriptHex: htlcScript.toString("hex"),
+          p2shAddress: p2sh.address!,
+        });
       } else {
         const typedData = order.getTypedData(srcChainId);
         console.log("📝 Signing typed data:", typedData);

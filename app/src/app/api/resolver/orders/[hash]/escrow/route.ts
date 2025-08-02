@@ -7,6 +7,7 @@ import { config } from "@/lib/config";
 import { Wallet } from "@sdk/evm/wallet";
 import { Resolver } from "@sdk/evm/resolver";
 import { EscrowFactory } from "@sdk/evm/escrow-factory";
+import { setDeployedAt } from "@sdk/evm/timelocks";
 import { Address } from "@1inch/cross-chain-sdk";
 
 import * as bitcoin from "bitcoinjs-lib";
@@ -79,13 +80,56 @@ export async function POST(
     if (config[srcChainId].type === "btc") {
       console.log("Source chain: BTC");
 
-      srcImmutables = {} as any;
-      complement = {} as any;
-      dstImmutables = {} as any;
-      srcEscrowAddress = "";
-      dstEscrowAddress = "";
-      srcDeployHash = "";
-      dstDeployHash = "";
+      // For BTC -> EVM, the 'signature' contains the funded transaction details
+      const { txHex, htlcScriptHex, p2shAddress } = JSON.parse(signature);
+
+      console.log("Broadcasting BTC HTLC funding transaction...");
+      srcDeployHash = await btcProvider.broadcastTx(txHex);
+      console.log(`BTC funding tx broadcasted: ${srcDeployHash}`);
+
+      console.log("Waiting for BTC transaction confirmation...");
+      const { confirmedAt } = await btcProvider.waitForTxConfirmation(
+        srcDeployHash
+      );
+      console.log(`BTC tx confirmed at timestamp: ${confirmedAt}`);
+
+      htlcScript = htlcScriptHex;
+      srcEscrowAddress = p2shAddress;
+
+      // // Reconstruct immutables based on the confirmed BTC transaction
+      const timeLocksWithDeployment = Sdk.TimeLocks.fromBigInt(
+        setDeployedAt(
+          //@ts-ignore
+          order.inner.fusionExtension.timeLocks.build,
+          BigInt(confirmedAt)
+        )
+      );
+
+      srcImmutables = Sdk.Immutables.new({
+        orderHash: hash,
+        // @ts-ignore
+        hashLock: order.inner.fusionExtionsion.hashLockInfo,
+        maker: order.maker,
+        taker: new Address(addressToEthAddressFormat(btcResolver.address!)),
+        token: order.makerAsset,
+        amount: order.makingAmount,
+        // @ts-ignore
+        safetyDeposit: order.inner.fusionExtionsion.srcSafetyDeposit,
+        timeLocks: timeLocksWithDeployment,
+      });
+
+      complement = Sdk.DstImmutablesComplement.new({
+        maker: order.receiver,
+        token: order.takerAsset,
+        amount: order.takingAmount,
+        // @ts-ignore
+        safetyDeposit: order.inner.fusionExtionsion.dstSafetyDeposit,
+      });
+
+      // Destination taker is the EVM resolver contract
+      dstImmutables = srcImmutables
+        .withComplement(complement)
+        .withTaker(new Address(evmResolverContract.dstAddress));
     } else {
       console.log("Source chain: EVM");
       const srcProvider = new JsonRpcProvider(
