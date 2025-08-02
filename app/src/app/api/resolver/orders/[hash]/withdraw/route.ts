@@ -31,7 +31,6 @@ export async function POST(
       dstEscrowAddress,
       srcImmutables,
       dstImmutables,
-      btcUserPublicKey,
       secret,
       htlcScript,
     } = await req.json();

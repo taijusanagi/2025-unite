@@ -302,11 +302,11 @@ export default function Home() {
         {
           hashLock: hashLock.keccak256,
           timeLocks: Sdk.TimeLocks.new({
-            srcWithdrawal: 10n,
+            srcWithdrawal: 1n, // to make demo in time
             srcPublicWithdrawal: 1023n,
             srcCancellation: 1024n, // must be 512, 1024... to set relative time check in bitcoin (only when btc = src)
             srcPublicCancellation: 1225n,
-            dstWithdrawal: 10n,
+            dstWithdrawal: 1n, // to make demo in time
             dstPublicWithdrawal: 511n,
             dstCancellation: 512n,
           }),
@@ -487,7 +487,6 @@ export default function Home() {
         const statusJson = await statusRes.json();
         if (statusJson.status === "escrow_created") {
           console.log("🏗️ Escrow created:", statusJson);
-          await new Promise((r) => setTimeout(r, 10000));
           updateLastStatus("done", [
             {
               explorerUrl: `${fromChain.exproler}/tx/${statusJson.srcDeployHash}`,

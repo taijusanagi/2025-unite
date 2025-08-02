@@ -175,9 +175,18 @@ export async function POST(
       srcImmutables = srcEvent[0];
       complement = srcEvent[1];
 
-      dstImmutables = srcImmutables
-        .withComplement(complement)
-        .withTaker(new Address(addressToEthAddressFormat(btcResolver.address)));
+      if (dstChainId === 99999) {
+        dstImmutables = srcImmutables
+          .withComplement(complement)
+          // .withTaker(new Address(evmResolverContract.dstAddress));
+          .withTaker(
+            new Address(addressToEthAddressFormat(btcResolver.address))
+          );
+      } else {
+        dstImmutables = srcImmutables
+          .withComplement(complement)
+          .withTaker(new Address(evmResolverContract.dstAddress));
+      }
 
       console.log("Calculating source escrow address...");
       srcEscrowAddress = new Sdk.EscrowFactory(
@@ -324,6 +333,7 @@ export async function POST(
         config[dstChainId].escrowFactory!
       );
       console.log("Deploying destination escrow contract...");
+      console.log("dstImmutables", dstImmutables);
       const { txHash: _dstDeployHash, blockTimestamp: _dstDeployedAt } =
         await dstResolverWallet.send(
           evmResolverContract.deployDst(dstImmutables)
