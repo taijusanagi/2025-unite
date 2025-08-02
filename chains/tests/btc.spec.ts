@@ -16,7 +16,7 @@ import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from '../sdk/evm/resolver'
 import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
 import bip68 from 'bip68'
-import {walletFromWIF, addressToEthAddressFormat, createDstHtlcScript} from '../sdk/btc'
+import {walletFromWIF, addressToEthAddressFormat, createDstHtlcScript, createSrcHtlcScript} from '../sdk/btc'
 
 import {BtcProvider} from '../sdk/btc'
 
@@ -437,6 +437,8 @@ describe('btc', () => {
                 sha256: bitcoin.crypto.sha256(secret)
             }
 
+            const lockInSeconds = 512 // Your desired lock time
+
             // use sdk to make order object
             const order = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory),
@@ -452,11 +454,11 @@ describe('btc', () => {
                 {
                     hashLock: hashLock.keccak256,
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 512n, // about 1 blocks, must be 512, 1024, 1536...
+                        srcWithdrawal: BigInt(lockInSeconds), // about 1 blocks, must be 512, 1024, 1536...
                         srcPublicWithdrawal: 1535n, // not used
                         srcCancellation: 1536n, // about 2 blocks, must be 512, 1024, 1536...
                         srcPublicCancellation: 1537n, // not used
-                        dstWithdrawal: 512n, // adjust with btc
+                        dstWithdrawal: BigInt(lockInSeconds), // adjust with btc
                         dstPublicWithdrawal: 1024n, // 100sec private withdrawal
                         dstCancellation: 1025n // 1sec public withdrawal
                     }),
@@ -497,31 +499,39 @@ describe('btc', () => {
             })
             // @ts-ignore
             const timeLocks = order.inner.fusionExtension.timeLocks
-
-            const lockInSeconds = 512 // Your desired lock time
             const sequenceValue = bip68.encode({seconds: lockInSeconds, blocks: undefined})
-            const htlcScript = bitcoin.script.compile([
-                Buffer.from(hexToUint8Array(orderHash)), // include orderhash here to maker sign it
-                bitcoin.opcodes.OP_DROP,
-                bitcoin.script.number.encode(sequenceValue),
-                bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
-                bitcoin.opcodes.OP_DROP,
-                bitcoin.opcodes.OP_IF,
-                bitcoin.opcodes.OP_SHA256,
+            const htlcScript = createSrcHtlcScript(
+                orderHash,
                 hashLock.sha256,
-                bitcoin.opcodes.OP_EQUALVERIFY,
-                btcResolver.publicKey,
-                bitcoin.opcodes.OP_CHECKSIG,
-                bitcoin.opcodes.OP_ELSE,
-                bitcoin.script.number.encode(
-                    bip68.encode({seconds: Number(timeLocks._srcCancellation), blocks: undefined})
-                ),
-                bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
-                bitcoin.opcodes.OP_DROP,
+                timeLocks._srcWithdrawal,
+                timeLocks._srcCancellation,
                 btcUser.publicKey,
-                bitcoin.opcodes.OP_CHECKSIG,
-                bitcoin.opcodes.OP_ENDIF
-            ])
+                btcResolver.publicKey,
+                true
+            )
+            // const sequenceValue = bip68.encode({seconds: lockInSeconds, blocks: undefined})
+            // const htlcScript = bitcoin.script.compile([
+            //     Buffer.from(hexToUint8Array(orderHash)), // include orderhash here to maker sign it
+            //     bitcoin.opcodes.OP_DROP,
+            //     bitcoin.script.number.encode(sequenceValue),
+            //     bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
+            //     bitcoin.opcodes.OP_DROP,
+            //     bitcoin.opcodes.OP_IF,
+            //     bitcoin.opcodes.OP_SHA256,
+            //     hashLock.sha256,
+            //     bitcoin.opcodes.OP_EQUALVERIFY,
+            //     btcResolver.publicKey,
+            //     bitcoin.opcodes.OP_CHECKSIG,
+            //     bitcoin.opcodes.OP_ELSE,
+            //     bitcoin.script.number.encode(
+            //         bip68.encode({seconds: Number(timeLocks._srcCancellation), blocks: undefined})
+            //     ),
+            //     bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
+            //     bitcoin.opcodes.OP_DROP,
+            //     btcUser.publicKey,
+            //     bitcoin.opcodes.OP_CHECKSIG,
+            //     bitcoin.opcodes.OP_ENDIF
+            // ])
 
             const p2sh = bitcoin.payments.p2sh({
                 redeem: {output: htlcScript, network},

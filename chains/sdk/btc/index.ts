@@ -5,6 +5,8 @@ import axios, {AxiosInstance} from 'axios'
 import {hexToUint8Array} from '@1inch/byte-utils'
 const ECPair = ECPairFactory(ecc)
 
+import bip68 from 'bip68'
+
 export type BtcWallet = {
     keyPair: ECPairInterface
     publicKey: Buffer
@@ -168,6 +170,51 @@ export class BtcProvider {
             console.error('❌ HTLC script hash mismatch. Script may not be correct.')
         }
     }
+}
+
+export function createSrcHtlcScript(
+    orderHashHex: string,
+    hashLockSha256: Buffer,
+    privateWithdrawal: number | bigint,
+    privateCancellation: number | bigint,
+    btcUserPublicKey: Buffer,
+    btcResolverPublicKey: Buffer,
+    lockTillPrivateWithdrawal: boolean = true
+): Buffer {
+    const scriptChunks: (Buffer | number)[] = []
+
+    // Include unique order hash at the start
+    scriptChunks.push(Buffer.from(hexToUint8Array(orderHashHex)))
+    scriptChunks.push(bitcoin.opcodes.OP_DROP)
+
+    // Optional withdrawal lock
+    if (lockTillPrivateWithdrawal) {
+        scriptChunks.push(bitcoin.script.number.encode(bip68.encode({seconds: Number(privateWithdrawal)})))
+        scriptChunks.push(bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY)
+        scriptChunks.push(bitcoin.opcodes.OP_DROP)
+    } else {
+        console.warn('⚠️ lockTillPrivateWithdrawal is disabled — not recommended for production use')
+    }
+
+    // Begin IF branch: hashlock & resolver
+    scriptChunks.push(bitcoin.opcodes.OP_IF)
+    scriptChunks.push(bitcoin.opcodes.OP_SHA256)
+    scriptChunks.push(hashLockSha256)
+    scriptChunks.push(bitcoin.opcodes.OP_EQUALVERIFY)
+    scriptChunks.push(btcResolverPublicKey)
+    scriptChunks.push(bitcoin.opcodes.OP_CHECKSIG)
+
+    // ELSE branch: timeout & user
+    scriptChunks.push(bitcoin.opcodes.OP_ELSE)
+    scriptChunks.push(bitcoin.script.number.encode(bip68.encode({seconds: Number(privateCancellation)})))
+    scriptChunks.push(bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY)
+    scriptChunks.push(bitcoin.opcodes.OP_DROP)
+    scriptChunks.push(btcUserPublicKey)
+    scriptChunks.push(bitcoin.opcodes.OP_CHECKSIG)
+
+    scriptChunks.push(bitcoin.opcodes.OP_ENDIF)
+
+    return bitcoin.script.compile(scriptChunks)
 }
 
 export function createDstHtlcScript(
