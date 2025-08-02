@@ -20,6 +20,8 @@ import {
 const ethPrivateKey = process.env.ETH_PRIVATE_KEY || "0x";
 const btcPrivateKey = process.env.BTC_PRIVATE_KEY || "0x";
 
+const network = bitcoin.networks.regtest;
+
 export async function POST(
   _req: Request,
   context: { params: Promise<{ hash: string }> }
@@ -174,6 +176,73 @@ export async function POST(
         bitcoin.opcodes.OP_CHECKSIG,
         bitcoin.opcodes.OP_ENDIF,
       ]);
+
+      const p2sh = bitcoin.payments.p2sh({
+        redeem: { output: htlcScript, network },
+        network,
+      });
+
+      console.log("✅ HTLC P2SH Address:", p2sh.address);
+
+      // === Taker (resolver) funds the HTLC ===
+      const utxos = await getUtxos(btcResolver.address!);
+      if (!utxos.length) {
+        console.error("❌ No UTXOs available to fund HTLC.");
+        return;
+      }
+
+      const amount = Number(order.takingAmount); // Match maker's amount or adjust as needed
+      const fee = 10000;
+      const totalInput = utxos.reduce((sum, u) => sum + u.value, 0);
+      const change = totalInput - amount - fee;
+
+      if (change < 0) {
+        console.error("❌ Not enough funds to lock BTC and cover the fee.");
+        return;
+      }
+
+      const psbt = new bitcoin.Psbt({ network });
+
+      for (const utxo of utxos) {
+        psbt.addInput({
+          hash: utxo.txid,
+          index: utxo.vout,
+          witnessUtxo: {
+            script: bitcoin.payments.p2wpkh({
+              pubkey: btcResolver.publicKey,
+              network,
+            }).output!,
+            value: utxo.value,
+          },
+        });
+      }
+
+      psbt.addOutput({
+        script: p2sh.output!,
+        value: amount,
+      });
+
+      if (change > 0) {
+        psbt.addOutput({
+          address: btcResolver.address!, // refund to self
+          value: change,
+        });
+      }
+
+      utxos.forEach((_, idx) => {
+        psbt.signInput(idx, {
+          publicKey: btcResolver.publicKey,
+          sign: (hash) => Buffer.from(btcResolver.keyPair.sign(hash)),
+        });
+      });
+
+      psbt.finalizeAllInputs();
+
+      const txHex = psbt.extractTransaction().toHex();
+      const btcDstEscrowHash = await broadcastTx(txHex);
+
+      console.log("✅ Taker has funded HTLC:");
+      console.log("🔗 btcDstEscrowHash:", btcDstEscrowHash);
 
       dstEscrowAddress = "";
       dstDeployedAt = 0n;
