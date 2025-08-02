@@ -22,6 +22,7 @@ export async function POST(
       srcImmutables,
       srcDeployHash,
       dstDeployHash,
+      htlcScript,
     } = await req.json();
 
     await connectRedis();
@@ -42,6 +43,7 @@ export async function POST(
       srcImmutables,
       srcDeployHash,
       dstDeployHash,
+      htlcScript,
     };
 
     await redis.hSet("orders", hash, JSON.stringify(updated));

@@ -2,18 +2,12 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import redis, { connectRedis } from "@/lib/redis";
-import { walletFromWIF } from "@sdk/btc";
-import * as bitcoin from "bitcoinjs-lib";
-
-const network = bitcoin.networks.testnet;
-const btcPrivateKey = process.env.BTC_PRIVATE_KEY || "";
-const btcResolver = walletFromWIF(btcPrivateKey, network);
 
 export async function GET(
   _req: NextRequest,
-  context: { params: { hash: string } }
+  context: { params: Promise<{ hash: string }> }
 ) {
-  const { hash } = context.params;
+  const { hash } = await context.params;
 
   if (!hash) {
     return NextResponse.json({ error: "Missing hash" }, { status: 400 });
@@ -27,8 +21,13 @@ export async function GET(
       return NextResponse.json({ error: "Order not found" }, { status: 404 });
     }
 
-    const { hashLock, dstChainId, dstEscrowAddress, dstImmutables } =
-      JSON.parse(raw);
+    const {
+      hashLock,
+      dstChainId,
+      dstEscrowAddress,
+      dstImmutables,
+      htlcScript,
+    } = JSON.parse(raw);
 
     if (!hashLock || !dstChainId || !dstEscrowAddress || !dstImmutables) {
       return NextResponse.json(
@@ -40,7 +39,7 @@ export async function GET(
     return NextResponse.json({
       dstEscrowAddress,
       dstImmutables,
-      resolverPublicKey: btcResolver.publicKey, // <- This is the resolver’s pubkey
+      htlcScript,
     });
   } catch (err) {
     console.error("Error in withdraw-btc-param GET:", err);

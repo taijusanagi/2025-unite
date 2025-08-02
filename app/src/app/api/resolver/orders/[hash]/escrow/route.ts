@@ -10,10 +10,11 @@ import { EscrowFactory } from "@sdk/evm/escrow-factory";
 import { Address } from "@1inch/cross-chain-sdk";
 
 import * as bitcoin from "bitcoinjs-lib";
-import { hexToUint8Array } from "@1inch/byte-utils";
+
 import {
   addressToEthAddressFormat,
   BtcProvider,
+  createDstHtlcScript,
   publicKeyToAddress,
   walletFromWIF,
 } from "@sdk/btc";
@@ -72,6 +73,7 @@ export async function POST(
     let dstDeployedAt: bigint;
     let srcDeployHash: string;
     let dstDeployHash: string;
+    let htlcScript = "";
 
     console.log("Escrow deployment in source chain");
     if (config[srcChainId].type === "btc") {
@@ -158,30 +160,21 @@ export async function POST(
         );
       }
 
-      const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks();
-      const htlcScript = bitcoin.script.compile([
-        Buffer.from(hexToUint8Array(dstImmutables.hash())),
-        bitcoin.opcodes.OP_DROP,
-        bitcoin.script.number.encode(Number(dstTimeLocks.privateWithdrawal)),
-        bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-        bitcoin.opcodes.OP_DROP,
-        bitcoin.opcodes.OP_IF,
-        bitcoin.opcodes.OP_SHA256,
-        hashLock.sha256,
-        bitcoin.opcodes.OP_EQUALVERIFY,
-        btcUserPublicKey, // 👤 Maker can claim with secret
-        bitcoin.opcodes.OP_CHECKSIG,
-        bitcoin.opcodes.OP_ELSE,
-        bitcoin.script.number.encode(Number(dstTimeLocks.privateCancellation)),
-        bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-        bitcoin.opcodes.OP_DROP,
-        btcResolver.publicKey, // 👤 Taker can refund after timeout
-        bitcoin.opcodes.OP_CHECKSIG,
-        bitcoin.opcodes.OP_ENDIF,
-      ]);
+      console.log("hashLock.sha256", hashLock.sha256);
+      console.log("btcUserPublicKey", btcUserPublicKey);
 
+      // BTC takes too long to be confirmed so it uses src deployed value for now
+      const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks();
+      const htlcScriptBuffer = createDstHtlcScript(
+        hash,
+        Buffer.from(hashLock.sha256, "hex"),
+        dstTimeLocks.privateWithdrawal,
+        dstTimeLocks.privateCancellation,
+        Buffer.from(btcUserPublicKey, "hex"),
+        btcResolver.publicKey
+      );
       const p2sh = bitcoin.payments.p2sh({
-        redeem: { output: htlcScript, network },
+        redeem: { output: htlcScriptBuffer, network },
         network,
       });
 
@@ -247,13 +240,17 @@ export async function POST(
       console.log("✅ Taker has funded HTLC:");
       console.log("🔗 btcDstEscrowHash:", btcDstEscrowHash);
 
-      const { confirmedAt } = await btcProvider.waitForTxConfirmation(
-        btcDstEscrowHash
-      );
+      // const { confirmedAt } = await btcProvider.waitForTxConfirmation(
+      //   btcDstEscrowHash
+      // );
 
       dstEscrowAddress = btcDstEscrowHash;
-      dstDeployedAt = BigInt(confirmedAt);
+      // BTC takes too long to be confirmed so it uses src deployed value for now
+      dstDeployedAt = dstImmutables.timeLocks.deployedAt;
       dstDeployHash = btcDstEscrowHash;
+
+      console.log("htlcScriptBuffer", htlcScriptBuffer);
+      htlcScript = htlcScriptBuffer.toString("hex");
     } else {
       console.log("Destination chain: EVM");
       const dstProvider = new JsonRpcProvider(
@@ -302,6 +299,7 @@ export async function POST(
         dstImmutables: dstImmutables.withDeployedAt(dstDeployedAt).build(),
         srcDeployHash,
         dstDeployHash,
+        htlcScript,
       }),
     });
 

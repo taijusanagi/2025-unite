@@ -5,7 +5,7 @@ import { FaGithub } from "react-icons/fa";
 import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
 import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
-import { Contract } from "ethers";
+import { Contract, keccak256 } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
 import { useAccount, useChainId } from "wagmi";
 
@@ -346,7 +346,9 @@ export default function Home() {
         body: JSON.stringify(
           {
             hash,
-            hashLock,
+            hashLock: {
+              sha256: hashLock.sha256.toString("hex"),
+            },
             srcChainId,
             dstChainId,
             order: order.build(),
@@ -404,20 +406,13 @@ export default function Home() {
         const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
           BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
         ).toDstTimeLocks();
-        console.log("dstTimeLocks", dstTimeLocks);
-
-        const htlcScript = createDstHtlcScript(
-          hash,
-          hashLock.sha256,
-          dstTimeLocks.privateWithdrawal,
-          dstTimeLocks.privateCancellation,
-          btcUser!.publicKey,
-          dstWithdrawParamsJson.resolverPublicKey
-        );
-        console.log("htlcScript", dstTimeLocks);
 
         const spendPsbt = new bitcoin.Psbt({ network });
-
+        console.log(
+          "dstWithdrawParamsJson.htlcScript",
+          dstWithdrawParamsJson.htlcScript
+        );
+        const htlcScript = Buffer.from(dstWithdrawParamsJson.htlcScript, "hex");
         spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
         spendPsbt.addInput({
           hash: dstWithdrawParamsJson.dstEscrowAddress,
@@ -445,7 +440,7 @@ export default function Home() {
           sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
         });
 
-        spendPsbt.finalizeInput(0, (_, input: any) => {
+        spendPsbt.finalizeInput(0, (_: number, input: any) => {
           const signature = input.partialSig[0].signature;
           const unlockingScript = bitcoin.script.compile([
             signature,

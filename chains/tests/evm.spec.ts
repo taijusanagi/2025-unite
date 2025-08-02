@@ -163,9 +163,6 @@ describe('evm', () => {
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
 
-            console.log('dstImmutables', dstImmutables)
-            console.log('dstImmutables.build()', dstImmutables.build())
-            console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
             const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmDstResolver.send(
                 resolverContract.deployDst(dstImmutables)
             )
