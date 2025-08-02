@@ -16,7 +16,7 @@ import {hexToUint8Array, uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
 import {Resolver} from '../sdk/evm/resolver'
 import {getOrderHashWithPatch, patchedDomain} from '../sdk/evm/patch'
 import bip68 from 'bip68'
-import {walletFromWIF, addressToEthAddressFormat} from '../sdk/btc'
+import {walletFromWIF, addressToEthAddressFormat, createDstHtlcScript} from '../sdk/btc'
 
 import {BtcProvider} from '../sdk/btc'
 
@@ -242,33 +242,18 @@ describe('btc', () => {
             )
             expect(rebuiltAddress).toBe(btcUser.address) // to make sure the btc user address is available on-chain
 
-            // ========================================
-            // 1️⃣ PHASE 1: Taker (resolver) creates HTLC and deposits BTC
-            // ========================================
-            console.log('🔐 Phase 1: Taker locking BTC into HTLC...')
+            console.log('🔐 Taker locking BTC into HTLC...')
 
             // NOTE: secret is known to the maker — taker only knows the hash
             const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks()
-            const htlcScript = bitcoin.script.compile([
-                Buffer.from(hexToUint8Array(dstImmutables.hash())),
-                bitcoin.opcodes.OP_DROP,
-                bitcoin.script.number.encode(Number(dstTimeLocks.privateWithdrawal)),
-                bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-                bitcoin.opcodes.OP_DROP,
-                bitcoin.opcodes.OP_IF,
-                bitcoin.opcodes.OP_SHA256,
+            const htlcScript = createDstHtlcScript(
+                orderHash,
                 hashLock.sha256,
-                bitcoin.opcodes.OP_EQUALVERIFY,
-                btcUser.publicKey, // 👤 Maker can claim with secret
-                bitcoin.opcodes.OP_CHECKSIG,
-                bitcoin.opcodes.OP_ELSE,
-                bitcoin.script.number.encode(Number(dstTimeLocks.privateCancellation)),
-                bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-                bitcoin.opcodes.OP_DROP,
-                btcResolver.publicKey, // 👤 Taker can refund after timeout
-                bitcoin.opcodes.OP_CHECKSIG,
-                bitcoin.opcodes.OP_ENDIF
-            ])
+                dstTimeLocks.privateWithdrawal,
+                dstTimeLocks.privateCancellation,
+                btcUser.publicKey,
+                btcResolver.publicKey
+            )
 
             const p2sh = bitcoin.payments.p2sh({
                 redeem: {output: htlcScript, network},

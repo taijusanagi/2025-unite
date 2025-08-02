@@ -4,7 +4,12 @@ import { Wallet } from "@sdk/evm//wallet";
 import { JsonRpcProvider } from "ethers";
 import { NextRequest, NextResponse } from "next/server";
 import * as bitcoin from "bitcoinjs-lib";
-import { BtcProvider } from "@sdk/btc";
+import {
+  BtcProvider,
+  createDstHtlcScript,
+  publicKeyToAddress,
+  walletFromWIF,
+} from "@sdk/btc";
 import Sdk from "@sdk/evm/cross-chain-sdk-shims";
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
@@ -22,17 +27,19 @@ export async function POST(
   }
   try {
     const {
+      hashLock,
       srcChainId,
       dstChainId,
-      order: _order,
       srcEscrowAddress,
       dstEscrowAddress,
       srcImmutables,
       dstImmutables,
+      btcRecipientPublicKey,
       secret,
     } = await req.json();
 
     if (
+      !hashLock ||
       !srcChainId ||
       !dstChainId ||
       !srcEscrowAddress ||
@@ -48,6 +55,7 @@ export async function POST(
     }
 
     const btcProvider = new BtcProvider(config[99999].rpc);
+    const btcResolver = walletFromWIF(btcPrivateKey, bitcoin.networks.testnet);
 
     const resolver = new Resolver(
       config[srcChainId].resolver!,
@@ -60,74 +68,96 @@ export async function POST(
     console.log("Withdraw in destination chain");
     if (config[srcChainId].type === "btc") {
       console.log("Destination chain: BTC");
+
+      if (!btcRecipientPublicKey) {
+        return NextResponse.json(
+          { error: "Missing required parameters" },
+          { status: 400 }
+        );
+      }
+
       console.log("dstImmutables", dstImmutables);
 
       const spendPsbt = new bitcoin.Psbt({ network });
       const rawTxHex = await await btcProvider.getRawTransactionHex(
         dstEscrowAddress
       );
-      const privateWithdrawal = Sdk.TimeLocks.fromBigInt(
+      const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
         BigInt(dstImmutables.timelocks)
-      ).toDstTimeLocks().privateWithdrawal;
+      ).toDstTimeLocks();
 
-      // spendPsbt.setLocktime(privateWithdrawal);
-      // spendPsbt.addInput({
-      //   hash: dstEscrowAddress,
-      //   index: 0,
-      //   nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
-      //   redeemScript: htlcScript,
-      //   sequence: 0xfffffffe, // Enable locktime
-      // });
+      const htlcScript = createDstHtlcScript(
+        hash,
+        hashLock.sha256,
+        dstTimeLocks.privateWithdrawal,
+        dstTimeLocks.privateCancellation,
+        btcRecipientPublicKey,
+        btcResolver.publicKey
+      );
 
-      // const redeemFee = 1000;
-      // const redeemValue = dstImmutables.amount - redeemFee;
+      spendPsbt.setLocktime(dstTimeLocks.privateWithdrawal);
+      spendPsbt.addInput({
+        hash: dstEscrowAddress,
+        index: 0,
+        nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+        redeemScript: htlcScript,
+        sequence: 0xfffffffe,
+      });
 
-      // if (redeemValue <= 0) {
-      //   console.error(`❌ Not enough value to redeem HTLC.`);
-      //   return;
-      // }
+      const redeemFee = 1000;
+      const redeemValue = dstImmutables.amount - redeemFee;
 
-      // spendPsbt.addOutput({
-      //   address: btcUser.address!,
-      //   value: redeemValue,
-      // });
+      if (redeemValue <= 0) {
+        console.error(`❌ Not enough value to redeem HTLC.`);
+        return;
+      }
 
-      // spendPsbt.signInput(0, {
-      //   publicKey: btcUser.publicKey,
-      //   sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash)),
-      // });
+      const btcUserRecipientAddress = publicKeyToAddress(
+        btcRecipientPublicKey,
+        network
+      );
 
-      // const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
-      //   const signature = input.partialSig[0].signature;
+      spendPsbt.addOutput({
+        address: btcUserRecipientAddress!,
+        value: redeemValue,
+      });
 
-      //   const unlockingScript = bitcoin.script.compile([
-      //     signature,
-      //     secret,
-      //     bitcoin.opcodes.OP_TRUE,
-      //   ]);
+      spendPsbt.signInput(0, {
+        publicKey: btcRecipientPublicKey,
+        sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash)),
+      });
 
-      //   const payment = bitcoin.payments.p2sh({
-      //     redeem: {
-      //       input: unlockingScript,
-      //       output: htlcScript,
-      //     },
-      //   });
+      const htlcRedeemFinalizer = (inputIndex: number, input: any) => {
+        const signature = input.partialSig[0].signature;
 
-      //   return {
-      //     finalScriptSig: payment.input,
-      //     finalScriptWitness: undefined,
-      //   };
-      // };
+        const unlockingScript = bitcoin.script.compile([
+          signature,
+          secret,
+          bitcoin.opcodes.OP_TRUE,
+        ]);
 
-      // spendPsbt.finalizeInput(0, htlcRedeemFinalizer);
+        const payment = bitcoin.payments.p2sh({
+          redeem: {
+            input: unlockingScript,
+            output: htlcScript,
+          },
+        });
 
-      // const finalTxHex = spendPsbt.extractTransaction().toHex();
-      // const finalTxId = await btcProvider.broadcastTx(finalTxHex);
+        return {
+          finalScriptSig: payment.input,
+          finalScriptWitness: undefined,
+        };
+      };
 
-      // console.log("🎉 Maker successfully claimed BTC from HTLC!");
-      // console.log("✅ Redemption TXID:", finalTxId);
+      spendPsbt.finalizeInput(0, htlcRedeemFinalizer);
 
-      dstWithdrawHash = "";
+      const finalTxHex = spendPsbt.extractTransaction().toHex();
+      const finalTxId = await btcProvider.broadcastTx(finalTxHex);
+
+      console.log("🎉 Maker successfully claimed BTC from HTLC!");
+      console.log("✅ Redemption TXID:", finalTxId);
+
+      dstWithdrawHash = finalTxId;
     } else {
       console.log("Destination chain: ETH");
       console.log("Withdrawing from destination escrow...");

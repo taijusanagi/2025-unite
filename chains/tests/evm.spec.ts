@@ -186,13 +186,6 @@ describe('evm', () => {
             )
             await increaseTime([evmSrc, evmDst], 11)
 
-            console.log('dstImmutables.build()', dstImmutables.build())
-            console.log('dstImmutables.build().timelocks', dstImmutables.build().timelocks)
-            console.log(
-                'privateWithdrawal',
-                Sdk.TimeLocks.fromBigInt(BigInt(dstImmutables.build().timelocks)).toDstTimeLocks().privateWithdrawal
-            )
-
             // User shares key after validation of dst escrow deployment
             console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
             await evmDstResolver.send(

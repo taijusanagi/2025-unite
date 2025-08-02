@@ -28,22 +28,26 @@ export async function POST(
     const {
       srcChainId,
       dstChainId,
+      hashLock,
       dstEscrowAddress,
       srcEscrowAddress,
       dstImmutables,
       srcImmutables,
+      btcUserRecipientKey,
     } = JSON.parse(raw);
 
     fetch(`${process.env.APP_URL}/api/resolver/orders/${hash}/withdraw`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        hashLock,
         srcChainId,
         dstChainId,
         dstEscrowAddress,
         srcEscrowAddress,
         dstImmutables,
         srcImmutables,
+        btcUserRecipientKey,
         secret,
       }),
     });

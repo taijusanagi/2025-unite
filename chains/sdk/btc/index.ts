@@ -2,6 +2,7 @@ import * as bitcoin from 'bitcoinjs-lib'
 import * as ecc from 'tiny-secp256k1'
 import {ECPairFactory, ECPairInterface} from 'ecpair'
 import axios, {AxiosInstance} from 'axios'
+import {hexToUint8Array} from '@1inch/byte-utils'
 const ECPair = ECPairFactory(ecc)
 
 export type BtcWallet = {
@@ -102,7 +103,7 @@ export class BtcProvider {
                 }
 
                 console.log(`⏳ Waiting for TX ${txid} confirmation...`)
-            } catch (err) {
+            } catch (err: any) {
                 console.warn(`⚠️ Error fetching TX ${txid}:`, err.message)
             }
 
@@ -167,4 +168,33 @@ export class BtcProvider {
             console.error('❌ HTLC script hash mismatch. Script may not be correct.')
         }
     }
+}
+export function createDstHtlcScript(
+    orderHashHex: string,
+    hashLockSha256: Buffer,
+    privateWithdrawal: number | bigint,
+    privateCancellation: number | bigint,
+    btcUserPublicKey: Buffer,
+    btcResolverPublicKey: Buffer
+): Buffer {
+    return bitcoin.script.compile([
+        Buffer.from(hexToUint8Array(orderHashHex)),
+        bitcoin.opcodes.OP_DROP,
+        bitcoin.script.number.encode(Number(privateWithdrawal)),
+        bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+        bitcoin.opcodes.OP_DROP,
+        bitcoin.opcodes.OP_IF,
+        bitcoin.opcodes.OP_SHA256,
+        hashLockSha256,
+        bitcoin.opcodes.OP_EQUALVERIFY,
+        btcUserPublicKey,
+        bitcoin.opcodes.OP_CHECKSIG,
+        bitcoin.opcodes.OP_ELSE,
+        bitcoin.script.number.encode(Number(privateCancellation)),
+        bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
+        bitcoin.opcodes.OP_DROP,
+        btcResolverPublicKey,
+        bitcoin.opcodes.OP_CHECKSIG,
+        bitcoin.opcodes.OP_ENDIF
+    ])
 }

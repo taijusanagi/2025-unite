@@ -361,7 +361,7 @@ export default function Home() {
             order: order.build(),
             extension: order.extension,
             signature,
-            btcUserRecipientKey: btcRecipientPublicKey,
+            btcRecipientPublicKey: btcRecipientPublicKey,
           },
           (_, value) => (typeof value === "bigint" ? value.toString() : value)
         ),
