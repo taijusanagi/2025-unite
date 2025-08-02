@@ -120,79 +120,86 @@ export default function Home() {
   };
 
   const createOrder = async () => {
+    console.log("🔄 Starting order creation...");
+
     if (fromChain.chainId === toChain.chainId) {
+      console.warn("⚠️ Source and destination networks are the same.");
       alert("The source and destination networks must be different.");
       return;
     }
 
     if (fromChain.type === "evm" && !evmsigner) {
+      console.warn("⚠️ EVM signer not connected.");
       alert("Please connect your EVM wallet to place an order.");
       evmConnectWallet();
       return;
     }
+
     if (fromChain.type === "evm" && connectedChainId !== fromChain.chainId) {
+      console.warn("⚠️ Wrong EVM chain selected.");
       alert("Please switch to the 'From' network in your wallet.");
       return;
     }
 
     if (fromChain.type === "btc" && !btcUser) {
+      console.warn("⚠️ BTC user not connected for source chain.");
       alert("Please connect your BTC wallet to place an order.");
       btcConnectWallet();
       return;
     }
 
     if (toChain.type === "btc" && !btcUser) {
-      alert("Please connect your BTC wallet to when destination is BTC.");
+      console.warn("⚠️ BTC user not connected for destination chain.");
+      alert("Please connect your BTC wallet when destination is BTC.");
       btcConnectWallet();
       return;
     }
 
+    console.log("✅ All pre-checks passed.");
     setIsStatusModalOpen(true);
     let currentStatuses: Status[] = [];
 
     const addStatus = (text: string) => {
+      console.log(`📌 Status: ${text}`);
       currentStatuses = [...currentStatuses, { text, state: "loading" }];
       setStatuses(currentStatuses);
     };
 
-    const updateLastStatus = (
-      state: StatusState,
-      explorers?: {
-        explorerUrl: string;
-        network?: string;
-      }[]
-    ) => {
-      if (currentStatuses.length === 0) return;
-      const lastStatus = currentStatuses[currentStatuses.length - 1];
+    const updateLastStatus = (state: StatusState, explorers?: any[]) => {
+      const last = currentStatuses[currentStatuses.length - 1];
+      console.log(`✅ Updated last status to '${state}':`, last?.text);
       currentStatuses = [
         ...currentStatuses.slice(0, -1),
-        { ...lastStatus, state, explorers },
+        { ...last, state, explorers },
       ];
       setStatuses(currentStatuses);
     };
 
     const addFinalStatus = (text: string, state: StatusState) => {
+      console.log(`🏁 Final Status (${state}): ${text}`);
       currentStatuses = [...currentStatuses, { text, state }];
       setStatuses(currentStatuses);
     };
 
     try {
+      console.log("🚧 Order preparation started...");
       setStatuses([]);
+
       const srcChainId = fromChain.chainId;
       const dstChainId = toChain.chainId;
 
-      if (config[srcChainId].type == "evm") {
+      if (config[srcChainId].type === "evm") {
         const srcWrappedNativeTokenContract = new Contract(
           config[srcChainId].wrappedNative!,
           IWETHContract.abi,
           evmsigner!
         );
 
-        // 1. Check balance
         addStatus("Checking token balance");
         const balance = await srcWrappedNativeTokenContract.balanceOf(
           evmsigner!.address
         );
+        console.log("💰 Token balance:", balance.toString());
         updateLastStatus("done");
 
         if (balance < amount) {
@@ -200,6 +207,7 @@ export default function Home() {
           const tx = await srcWrappedNativeTokenContract.deposit({
             value: amount,
           });
+          console.log("📤 Deposit TX:", tx.hash);
           await tx.wait();
           updateLastStatus("done", [
             {
@@ -209,12 +217,12 @@ export default function Home() {
           ]);
         }
 
-        // 2. Check allowance
         addStatus("Checking token allowance");
         const allowance = await srcWrappedNativeTokenContract.allowance(
           evmsigner!.address,
           config[srcChainId].limitOrderProtocol
         );
+        console.log("🔓 Token allowance:", allowance.toString());
         updateLastStatus("done");
 
         if (allowance < UINT_256_MAX) {
@@ -223,6 +231,7 @@ export default function Home() {
             config[srcChainId].limitOrderProtocol,
             UINT_256_MAX
           );
+          console.log("✍️ Approve TX:", tx.hash);
           await tx.wait();
           updateLastStatus("done", [
             {
@@ -233,19 +242,17 @@ export default function Home() {
         }
       }
 
-      // 3. Sign order
       addStatus("Sign the order in your wallet");
-
       const secret = randomBytes(32);
       const hashLock = {
         keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
         sha256: bitcoin.crypto.sha256(secret),
       };
+      console.log("🔐 Hash lock created", hashLock);
 
       const timestamp = BigInt(Math.floor(Date.now() / 1000));
-
       let takerAsset = new Address(nativeTokenAddress);
-      if (config[dstChainId].type == "evm") {
+      if (config[dstChainId].type === "evm") {
         takerAsset = new Address(config[dstChainId].wrappedNative!);
       }
 
@@ -297,22 +304,21 @@ export default function Home() {
         }
       );
 
+      console.log("📦 Order constructed:", order);
       order.inner.fusionExtension.srcChainId = srcChainId;
       order.inner.fusionExtension.dstChainId = dstChainId;
       order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20!);
 
       let signature = "";
-
-      if (config[dstChainId].type == "btc") {
-        // @ts-ignore
+      if (config[dstChainId].type === "btc") {
         order.inner.inner.receiver = new Address(
           addressToEthAddressFormat(btcUser!.address)
         );
       }
 
-      if (config[srcChainId].type == "btc") {
-      } else {
+      if (config[srcChainId].type !== "btc") {
         const typedData = order.getTypedData(srcChainId);
+        console.log("📝 Signing typed data:", typedData);
         signature = await evmsigner!.signTypedData(
           {
             chainId: srcChainId,
@@ -323,14 +329,16 @@ export default function Home() {
           typedData.message
         );
       }
+
       updateLastStatus("done");
 
-      // 4. Submit order
       addStatus("Submitting order to relayer");
       const hash = getOrderHashWithPatch(srcChainId, order, {
         ...patchedDomain,
         verifyingContract: config[srcChainId].limitOrderProtocol!,
       });
+
+      console.log("📡 Order hash:", hash);
 
       const res = await fetch("/api/relayer/orders", {
         method: "POST",
@@ -344,21 +352,22 @@ export default function Home() {
             order: order.build(),
             extension: order.extension,
             signature,
-            btcUserPublicKey: btcUser!.publicKey,
+            btcUserPublicKey: btcUser!.publicKey.toString("hex"),
           },
-          (_, value) => (typeof value === "bigint" ? value.toString() : value)
+          (_, v) => (typeof v === "bigint" ? v.toString() : v)
         ),
       });
 
       if (!res.ok) throw new Error("Failed to submit order");
+      console.log("📨 Order submitted to relayer");
       updateLastStatus("done");
 
-      // 5. Wait for escrow_created
       addStatus("Waiting for escrow creation");
       while (true) {
         const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
         const statusJson = await statusRes.json();
         if (statusJson.status === "escrow_created") {
+          console.log("🏗️ Escrow created:", statusJson);
           await new Promise((r) => setTimeout(r, 10000));
           updateLastStatus("done", [
             {
@@ -375,31 +384,27 @@ export default function Home() {
         await new Promise((r) => setTimeout(r, 3000));
       }
 
-      // 5.5 BTC Claim
       if (config[dstChainId].type === "btc") {
+        console.log("🔁 Starting BTC claim flow");
         const dstWithdrawParamsRes = await fetch(
-          `/api/relayer/orders/${hash}/btc/dst-withdraw-params`,
-          {
-            method: "GET",
-            headers: { "Content-Type": "application/json" },
-          }
+          `/api/relayer/orders/${hash}/btc/dst-withdraw-params`
         );
-
         if (!dstWithdrawParamsRes.ok)
-          throw new Error("Failed to fetch BTC desination withdraw params");
+          throw new Error("Failed to fetch BTC withdraw params");
 
         const dstWithdrawParamsJson = await dstWithdrawParamsRes.json();
+        console.log("📬 BTC withdraw params:", dstWithdrawParamsJson);
+
         const network = bitcoin.networks.testnet;
         const btcProvider = new BtcProvider(config[99999].rpc);
-        const spendPsbt = new bitcoin.Psbt({
-          network,
-        });
-        const rawTxHex = await await btcProvider.getRawTransactionHex(
+        const rawTxHex = await btcProvider.getRawTransactionHex(
           dstWithdrawParamsJson.dstEscrowAddress
         );
+
         const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
           BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
         ).toDstTimeLocks();
+        console.log("dstTimeLocks", dstTimeLocks);
 
         const htlcScript = createDstHtlcScript(
           hash,
@@ -409,8 +414,11 @@ export default function Home() {
           btcUser!.publicKey,
           dstWithdrawParamsJson.resolverPublicKey
         );
+        console.log("htlcScript", dstTimeLocks);
 
-        spendPsbt.setLocktime(dstTimeLocks.privateWithdrawal);
+        const spendPsbt = new bitcoin.Psbt({ network });
+
+        spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
         spendPsbt.addInput({
           hash: dstWithdrawParamsJson.dstEscrowAddress,
           index: 0,
@@ -422,9 +430,8 @@ export default function Home() {
         const redeemFee = 1000;
         const redeemValue =
           dstWithdrawParamsJson.dstImmutables.amount - redeemFee;
-
         if (redeemValue <= 0) {
-          console.error(`❌ Not enough value to redeem HTLC.`);
+          console.error("❌ Not enough value to redeem HTLC.");
           return;
         }
 
@@ -438,9 +445,8 @@ export default function Home() {
           sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
         });
 
-        spendPsbt.finalizeInput(0, (_: number, input: any) => {
+        spendPsbt.finalizeInput(0, (_, input: any) => {
           const signature = input.partialSig[0].signature;
-
           const unlockingScript = bitcoin.script.compile([
             signature,
             secret,
@@ -467,7 +473,6 @@ export default function Home() {
         console.log("✅ Redemption TXID:", finalTxId);
       }
 
-      // 6. Submit secret
       addStatus("Submitting secret");
       const secretRes = await fetch(`/api/relayer/orders/${hash}/secret`, {
         method: "POST",
@@ -477,12 +482,12 @@ export default function Home() {
       if (!secretRes.ok) throw new Error("Failed to share secret");
       updateLastStatus("done");
 
-      // 7. Wait for withdraw_completed
       addStatus("Waiting for withdrawal to complete");
       while (true) {
         const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
         const statusJson = await statusRes.json();
         if (statusJson.status === "withdraw_completed") {
+          console.log("✅ Withdrawal complete:", statusJson);
           updateLastStatus("done", [
             {
               explorerUrl: `${fromChain.exproler}/tx/${statusJson.srcWithdrawHash}`,
@@ -498,10 +503,10 @@ export default function Home() {
         await new Promise((r) => setTimeout(r, 3000));
       }
 
-      // 8. Done
       addFinalStatus("Swap Complete! 🎉", "done");
+      console.log("✅ Order process completed.");
     } catch (error: any) {
-      console.error("An error occurred:", error);
+      console.error("❌ Error in createOrder:", error);
       updateLastStatus("failed");
       addFinalStatus(error.message || "An unknown error occurred", "failed");
     }

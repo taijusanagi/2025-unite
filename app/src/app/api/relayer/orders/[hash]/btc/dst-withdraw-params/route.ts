@@ -1,4 +1,4 @@
-// File: app/api/relayer/orders/[hash]/withdraw-btc-param/route.ts
+// File: app/api/relayer/orders/[hash]/dst-withdraw-params/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
 import redis, { connectRedis } from "@/lib/redis";

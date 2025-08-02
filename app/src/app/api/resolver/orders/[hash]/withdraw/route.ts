@@ -4,18 +4,10 @@ import { Wallet } from "@sdk/evm//wallet";
 import { JsonRpcProvider } from "ethers";
 import { NextRequest, NextResponse } from "next/server";
 import * as bitcoin from "bitcoinjs-lib";
-import {
-  BtcProvider,
-  createDstHtlcScript,
-  publicKeyToAddress,
-  walletFromWIF,
-} from "@sdk/btc";
-import Sdk from "@sdk/evm/cross-chain-sdk-shims";
+import { BtcProvider, walletFromWIF } from "@sdk/btc";
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 const btcPrivateKey = process.env.BTC_PRIVATE_KEY || "0x";
-
-const network = bitcoin.networks.testnet;
 
 export async function POST(
   req: NextRequest,
@@ -62,8 +54,8 @@ export async function POST(
       config[dstChainId].resolver!
     );
 
-    let srcWithdrawHash: string;
-    let dstWithdrawHash: string;
+    let srcWithdrawHash = "";
+    let dstWithdrawHash = "";
 
     console.log("Withdraw in destination chain");
     if (config[srcChainId].type === "btc") {
