@@ -119,15 +119,17 @@ export async function POST(
       console.log("Constructing destination escrow immutables...");
       srcImmutables = srcEvent[0];
       complement = srcEvent[1];
+
       dstImmutables = srcImmutables
         .withComplement(complement)
-        .withTaker(new Address(evmResolverContract.dstAddress));
+        .withTaker(new Address(addressToEthAddressFormat(btcResolver.address)));
+
       console.log("Calculating source escrow address...");
       srcEscrowAddress = new Sdk.EscrowFactory(
         new Address(config[srcChainId].escrowFactory!)
       )
         .getSrcEscrowAddress(
-          srcEvent[0],
+          srcImmutables,
           await srcEscrowFactory.getSourceImpl()
         )
         .toString();

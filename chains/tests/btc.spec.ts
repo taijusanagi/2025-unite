@@ -226,6 +226,9 @@ describe('btc', () => {
 
             console.log('eth - srcEscrowEvent', srcEscrowEvent)
 
+            console.log('srcImmutables', srcEscrowEvent[0])
+            console.log('complement', srcEscrowEvent[1])
+
             const dstImmutables = srcEscrowEvent[0]
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
