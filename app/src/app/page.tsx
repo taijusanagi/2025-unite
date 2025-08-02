@@ -533,28 +533,11 @@ export default function Home() {
                       const selected = chains.find(
                         (c) => c.chainId === Number(e.target.value)
                       );
-                      if (
-                        (connectedWalletType === "btc" &&
-                          selected?.type !== "btc") ||
-                        (connectedWalletType === "evm" &&
-                          selected?.type !== "evm")
-                      ) {
-                        return; // Do nothing if the selected chain is not compatible
-                      }
                       setFromChain(selected!);
                     }}
                   >
                     {chains.map((chain) => (
-                      <option
-                        key={chain.chainId}
-                        value={chain.chainId}
-                        disabled={
-                          (connectedWalletType === "btc" &&
-                            chain.type !== "btc") ||
-                          (connectedWalletType === "evm" &&
-                            chain.type !== "evm")
-                        }
-                      >
+                      <option key={chain.chainId} value={chain.chainId}>
                         {chain.name} ({chain.symbol})
                       </option>
                     ))}
