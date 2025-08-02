@@ -643,7 +643,7 @@ async function main() {
 
     // await sendBitcoin({
     //     fromWIF: privKeyA,
-    //     toAddress: resolverBech32Address!,
+    //     toAddress: userBech32Address!,
     //     amountSats: 100000,
     //     fromType: 'p2pkh'
     // })

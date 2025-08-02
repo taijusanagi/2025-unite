@@ -28,22 +28,18 @@ import IWETHContract from "@sdk/evm/contracts/IWETH.json";
 import {
   addressToEthAddressFormat,
   BtcProvider,
-  createDstHtlcScript,
   createSrcHtlcScript,
-  publicKeyToAddress,
 } from "@sdk/btc";
 
 import * as bitcoin from "bitcoinjs-lib";
-import ECPairFactory from "ecpair";
-import * as ecc from "tiny-secp256k1";
 
 import { walletFromWIF, BtcWallet } from "@sdk/btc";
 
-const bip68 = require("bip68");
-
 const network = bitcoin.networks.testnet;
-const ECPair = ECPairFactory(ecc);
+
 const { Address } = Sdk;
+const btcResolverPublicKey =
+  process.env.NEXT_PUBLIC_BTC_RESOLVER_PUBLIC_KEY || "";
 
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
@@ -126,6 +122,12 @@ export default function Home() {
 
   const createOrder = async () => {
     console.log("🔄 Starting order creation...");
+
+    if (!btcResolverPublicKey) {
+      console.warn("⚠️ btc resolver public key not defined.");
+      alert("btc resolver public key not defined.");
+      return;
+    }
 
     if (fromChain.chainId === toChain.chainId) {
       console.warn("⚠️ Source and destination networks are the same.");
@@ -364,7 +366,7 @@ export default function Home() {
           timeLocks._srcWithdrawal,
           timeLocks._srcCancellation,
           btcUser!.publicKey,
-          btcUser!.publicKey,
+          Buffer.from(btcResolverPublicKey, "hex"),
           false
         );
 

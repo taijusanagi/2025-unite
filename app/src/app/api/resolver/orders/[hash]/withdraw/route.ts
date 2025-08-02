@@ -5,9 +5,14 @@ import { JsonRpcProvider } from "ethers";
 import { NextRequest, NextResponse } from "next/server";
 import * as bitcoin from "bitcoinjs-lib";
 import { BtcProvider, walletFromWIF } from "@sdk/btc";
+import Sdk from "@sdk/evm/cross-chain-sdk-shims";
+
+const bip68 = require("bip68");
 
 const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
 const btcPrivateKey = process.env.BTC_PRIVATE_KEY || "0x";
+
+const network = bitcoin.networks.testnet;
 
 export async function POST(
   req: NextRequest,
@@ -28,6 +33,7 @@ export async function POST(
       dstImmutables,
       btcUserPublicKey,
       secret,
+      htlcScript,
     } = await req.json();
 
     if (
@@ -79,7 +85,111 @@ export async function POST(
     console.log("Withdraw in source chain");
     if (config[srcChainId].type === "btc") {
       console.log("Source chain: BTC");
-      srcWithdrawHash = "";
+
+      if (!htlcScript) {
+        throw new Error("Missing htlcScript for BTC withdrawal");
+      }
+
+      console.log("Withdrawing from BTC HTLC...");
+      const htlcUtxos = await btcProvider.getUtxos(srcEscrowAddress);
+      if (!htlcUtxos.length) {
+        throw new Error("No UTXOs found at HTLC address.");
+      }
+
+      const htlcUtxo = htlcUtxos[0];
+      const rawTxHex = await btcProvider.getRawTransactionHex(htlcUtxo.txid);
+      const htlcScriptBuffer = Buffer.from(htlcScript, "hex");
+      const secretBuffer = Buffer.from(secret, "hex");
+
+      const resolverPubKeyHex = btcResolver.keyPair.publicKey.toString();
+      const scriptContainsResolverKey = htlcScript.includes(
+        Buffer.from(resolverPubKeyHex, "hex")
+      );
+
+      // Log to confirm
+      console.log("Signing pubkey:", resolverPubKeyHex);
+      console.log("HTLC contains resolver pubkey:", scriptContainsResolverKey);
+
+      const wrongKey =
+        "02ce09b3d6b374619431656279fb2506fe665404adc39afccb14ca3d8e3c3a0d78";
+      console.log(
+        "Expected resolver pubkey:",
+        Buffer.from(btcResolver.keyPair.publicKey).toString("hex")
+      );
+      console.log(
+        "Does it match error key?",
+        Buffer.from(btcResolver.keyPair.publicKey).toString("hex") === wrongKey
+      );
+
+      const tx = bitcoin.Transaction.fromHex(rawTxHex);
+      const expectedScriptPubKey = bitcoin.payments
+        .p2sh({
+          redeem: { output: htlcScriptBuffer, network },
+          network,
+        })
+        .output!.toString("hex");
+
+      const matchIndex = tx.outs.findIndex(
+        (out) => out.script.toString("hex") === expectedScriptPubKey
+      );
+
+      console.log("Found matching output index:", matchIndex);
+      console.log("Using input index (vout):", htlcUtxo.vout);
+
+      // const sequenceValue = bip68.encode({
+      //   seconds: Number(srcImmutables.timeLocks._srcWithdrawal),
+      // });
+
+      const psbt = new bitcoin.Psbt({ network });
+      // psbt.setVersion(2);
+      psbt.addInput({
+        hash: htlcUtxo.txid,
+        index: htlcUtxo.vout,
+        nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+        redeemScript: htlcScriptBuffer,
+        // sequence: sequenceValue,
+      });
+
+      const redeemFee = 1000;
+      const redeemValue = htlcUtxo.value - redeemFee;
+      if (redeemValue <= 0) {
+        throw new Error("Not enough value to redeem HTLC after fee.");
+      }
+
+      psbt.addOutput({
+        address: btcResolver.address!,
+        value: redeemValue,
+      });
+
+      psbt.signInput(0, {
+        publicKey: Buffer.from(btcResolver.keyPair.publicKey),
+        sign: (hash) => Buffer.from(btcResolver.keyPair.sign(hash)),
+      });
+
+      psbt.finalizeInput(0, (inputIndex: number, input: any) => {
+        const signature = input.partialSig[0].signature;
+        const unlockingScript = bitcoin.script.compile([
+          signature,
+          secretBuffer,
+          bitcoin.opcodes.OP_TRUE,
+        ]);
+
+        const payment = bitcoin.payments.p2sh({
+          redeem: {
+            input: unlockingScript,
+            output: input.redeemScript,
+          },
+        });
+
+        return {
+          finalScriptSig: payment.input,
+          finalScriptWitness: undefined,
+        };
+      });
+
+      const finalTxHex = psbt.extractTransaction().toHex();
+      srcWithdrawHash = await btcProvider.broadcastTx(finalTxHex);
+      console.log(`BTC withdrawal complete. TxID: ${srcWithdrawHash}`);
     } else {
       console.log("Source chain: ETH");
       console.log("Withdrawing from source escrow...");

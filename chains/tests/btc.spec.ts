@@ -508,7 +508,7 @@ describe('btc', () => {
                 timeLocks._srcCancellation,
                 btcUser.publicKey,
                 btcResolver.publicKey,
-                true
+                false
             )
 
             const p2sh = bitcoin.payments.p2sh({
@@ -688,13 +688,13 @@ describe('btc', () => {
             const rawTxHex = await btcProvider.getRawTransactionHex(htlcUtxo.txid)
 
             const spendPsbt = new bitcoin.Psbt({network})
-            spendPsbt.setVersion(2)
+            // spendPsbt.setVersion(2)
             spendPsbt.addInput({
                 hash: htlcUtxo.txid,
                 index: htlcUtxo.vout,
                 nonWitnessUtxo: Buffer.from(rawTxHex, 'hex'),
-                redeemScript: htlcScriptBuffer,
-                sequence: sequenceValue
+                redeemScript: htlcScriptBuffer
+                // sequence: sequenceValue
             })
 
             const redeemFee = 1000

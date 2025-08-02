@@ -88,11 +88,11 @@ export async function POST(
       console.log(`BTC funding tx broadcasted: ${srcDeployHash}`);
 
       console.log("Waiting for BTC transaction confirmation...");
+      const { confirmedAt } = await btcProvider.waitForTxConfirmation(
+        srcDeployHash
+      );
       // to make the demo easier
-      // const { confirmedAt } = await btcProvider.waitForTxConfirmation(
-      //   srcDeployHash
-      // );
-      const confirmedAt = Math.floor(Date.now() / 1000);
+      // const confirmedAt = Math.floor(Date.now() / 1000);
       console.log(`BTC tx confirmed at timestamp: ${confirmedAt}`);
 
       htlcScript = htlcScriptHex;

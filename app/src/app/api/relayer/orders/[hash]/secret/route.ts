@@ -34,6 +34,7 @@ export async function POST(
       dstImmutables,
       srcImmutables,
       btcUserRecipientKey,
+      htlcScript,
     } = JSON.parse(raw);
 
     fetch(`${process.env.APP_URL}/api/resolver/orders/${hash}/withdraw`, {
@@ -49,6 +50,7 @@ export async function POST(
         srcImmutables,
         btcUserRecipientKey,
         secret,
+        htlcScript,
       }),
     });
 
