@@ -20,15 +20,15 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
+      "@sdk/*": ["../chains/sdk/*"],
       "@1inch/byte-utils": ["./node_modules/@1inch/byte-utils"],
       "@1inch/cross-chain-sdk": ["./node_modules/@1inch/cross-chain-sdk"],
-      "@sdk/*": ["../chains/sdk/*"],
+      "@bitcoinerlab/secp256k1": ["./node_modules/@bitcoinerlab/secp256k1"],
       "axios": ["./node_modules/axios"],
       "bip68": ["./node_modules/bip68"],
       "bitcoinjs-lib": ["./node_modules/bitcoinjs-lib"],
       "ecpair": ["./node_modules/ecpair"],
-      "ethers": ["./node_modules/ethers"],
-      "tiny-secp256k1": ["./node_modules/tiny-secp256k1"]
+      "ethers": ["./node_modules/ethers"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

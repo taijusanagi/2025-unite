@@ -12,6 +12,7 @@
   "dependencies": {
     "@1inch/byte-utils": "2.6.0",
     "@1inch/cross-chain-sdk": "v0.1.15-rc.0",
+    "@bitcoinerlab/secp256k1": "^1.2.0",
     "@rainbow-me/rainbowkit": "^2.2.8",
     "@tanstack/react-query": "^5.83.0",
     "axios": "^1.11.0",
@@ -26,7 +27,6 @@
     "react-icons": "^5.5.0",
     "react-toastify": "^11.0.5",
     "redis": "^5.6.1",
-    "tiny-secp256k1": "^2.2.4",
     "viem": "^2.33.1",
     "wagmi": "^2.16.0"
   },

@@ -1,6 +1,6 @@
 import * as bitcoin from 'bitcoinjs-lib'
 import axios from 'axios'
-import * as ecc from 'tiny-secp256k1'
+import ecc from '@bitcoinerlab/secp256k1'
 import {ECPairFactory, ECPairInterface} from 'ecpair'
 import crypto from 'crypto'
 

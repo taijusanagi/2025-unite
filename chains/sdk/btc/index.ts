@@ -1,11 +1,12 @@
 import * as bitcoin from 'bitcoinjs-lib'
-import * as ecc from 'tiny-secp256k1'
+import ecc from '@bitcoinerlab/secp256k1'
 import {ECPairFactory, ECPairInterface} from 'ecpair'
 import axios, {AxiosInstance} from 'axios'
 import {hexToUint8Array} from '@1inch/byte-utils'
 const ECPair = ECPairFactory(ecc)
 
-const bip68 = require('bip68')
+//@ts-ignore
+import bip68 from 'bip68'
 
 export type BtcWallet = {
     keyPair: ECPairInterface

@@ -14,6 +14,9 @@ importers:
       '@1inch/cross-chain-sdk':
         specifier: v0.1.15-rc.0
         version: 0.1.15-rc.0(assert@2.1.0)
+      '@bitcoinerlab/secp256k1':
+        specifier: ^1.2.0
+        version: 1.2.0
       axios:
         specifier: ^1.11.0
         version: 1.11.0
@@ -35,9 +38,6 @@ importers:
       prool:
         specifier: 0.0.24
         version: 0.0.24
-      tiny-secp256k1:
-        specifier: ^2.2.4
-        version: 2.2.4
     devDependencies:
       '@1inch/eslint-config':
         specifier: ^v3.0.7
@@ -368,6 +368,9 @@ packages:
   '@bcoe/v8-coverage@0.2.3':
     resolution: {integrity: sha512-0hYQ8SB4Db5zvZB4axdMHGwEaQjkZzFjQiN9LVYvIFB2nSUHW9tYpxWriPrWDASIxiaXax83REcLxuSdnGPZtw==}
 
+  '@bitcoinerlab/secp256k1@1.2.0':
+    resolution: {integrity: sha512-jeujZSzb3JOZfmJYI0ph1PVpCRV5oaexCgy+RvCXV8XlY+XFB/2n3WOcvBsKLsOw78KYgnQrQWb2HrKE4be88Q==}
+
   '@emnapi/core@1.4.3':
     resolution: {integrity: sha512-4m62DuCE07lw01soJwPiBGC0nAww0Q+RY70VZ+n49yDIO13yyinhbWCeNnaob0lakDtWQzSdtNWzJeOJt2ma+g==}
 
@@ -574,9 +577,17 @@ packages:
   '@noble/curves@1.2.0':
     resolution: {integrity: sha512-oYclrNgRaM9SsBUBVbb8M6DTV7ZHRTKugureoYEncY5c65HOmRzvSiTE3y5CYaPYJA/GVkrhXEoF0M3Ya9PMnw==}
 
+  '@noble/curves@1.9.6':
+    resolution: {integrity: sha512-GIKz/j99FRthB8icyJQA51E8Uk5hXmdyThjgQXRKiv9h0zeRlzSCLIzFw6K1LotZ3XuB7yzlf76qk7uBmTdFqA==}
+    engines: {node: ^14.21.3 || >=16}
+
   '@noble/hashes@1.3.2':
     resolution: {integrity: sha512-MVC8EAQp7MvEcm30KWENFjgR+Mkmf+D189XJTkFIlwohU5hcBbn1ZkKq7KVTi2Hme3PMGF390DaL52beVrIihQ==}
     engines: {node: '>= 16'}
+
+  '@noble/hashes@1.8.0':
+    resolution: {integrity: sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A==}
+    engines: {node: ^14.21.3 || >=16}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -2693,10 +2704,6 @@ packages:
   text-table@0.2.0:
     resolution: {integrity: sha512-N+8UisAXDGk8PFXP4HAzVR9nbfmVJ3zYLAWiTIoqC5v5isinhr+r5uaO8+7r3BMfuNIufIsA7RdpVgacC2cSpw==}
 
-  tiny-secp256k1@2.2.4:
-    resolution: {integrity: sha512-FoDTcToPqZE454Q04hH9o2EhxWsm7pOSpicyHkgTwKhdKWdsTUuqfP5MLq3g+VjAtl2vSx6JpXGdwA2qpYkI0Q==}
-    engines: {node: '>=14.0.0'}
-
   tinyglobby@0.2.14:
     resolution: {integrity: sha512-tX5e7OM1HnYr2+a2C/4V0htOcSQcoSTH9KgJnVvNm5zm/cyEWKJ7j7YutsH9CxMdtOkkLFy2AHrMci9IM8IPZQ==}
     engines: {node: '>=12.0.0'}
@@ -2778,10 +2785,6 @@ packages:
     resolution: {integrity: sha512-NcRtPEOsPFFWjobJEtfihkLCZCXZt/os3zf8nTxjVH3RvTSxjrCamJpbExGvYOF+tFHc3pA65qpdwPbzjohhew==}
     engines: {node: '>=14.17'}
     hasBin: true
-
-  uint8array-tools@0.0.7:
-    resolution: {integrity: sha512-vrrNZJiusLWoFWBqz5Y5KMCgP9W9hnjZHzZiZRT8oNAkq3d5Z5Oe76jAvVVSRh4U8GGR90N2X1dWtrhvx6L8UQ==}
-    engines: {node: '>=14.0.0'}
 
   uint8array-tools@0.0.8:
     resolution: {integrity: sha512-xS6+s8e0Xbx++5/0L+yyexukU7pz//Yg6IHg3BKhXotg1JcYtgxVcUctQ0HxLByiJzpAkNFawz1Nz5Xadzo82g==}
@@ -3203,6 +3206,10 @@ snapshots:
 
   '@bcoe/v8-coverage@0.2.3': {}
 
+  '@bitcoinerlab/secp256k1@1.2.0':
+    dependencies:
+      '@noble/curves': 1.9.6
+
   '@emnapi/core@1.4.3':
     dependencies:
       '@emnapi/wasi-threads': 1.0.2
@@ -3588,7 +3595,13 @@ snapshots:
     dependencies:
       '@noble/hashes': 1.3.2
 
+  '@noble/curves@1.9.6':
+    dependencies:
+      '@noble/hashes': 1.8.0
+
   '@noble/hashes@1.3.2': {}
+
+  '@noble/hashes@1.8.0': {}
 
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
@@ -6085,10 +6098,6 @@ snapshots:
 
   text-table@0.2.0: {}
 
-  tiny-secp256k1@2.2.4:
-    dependencies:
-      uint8array-tools: 0.0.7
-
   tinyglobby@0.2.14:
     dependencies:
       fdir: 6.4.6(picomatch@4.0.2)
@@ -6176,8 +6185,6 @@ snapshots:
   typeforce@1.18.0: {}
 
   typescript@5.5.2: {}
-
-  uint8array-tools@0.0.7: {}
 
   uint8array-tools@0.0.8: {}
 
