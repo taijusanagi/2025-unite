@@ -100,7 +100,7 @@ export async function POST(
       console.log("Deploying source escrow contract...");
       const {
         txHash: _srcDeployHash,
-        blockHash: srcDeployBlock,
+        blockNumber: srcDeployBlockNumber,
         blockTimestamp: srcDeployedAt,
       } = await srcResolverWallet.send(
         evmResolverContract.deploySrc(
@@ -121,7 +121,9 @@ export async function POST(
       );
 
       console.log("Fetching source deployment event...");
-      const srcEvent = await srcEscrowFactory.getSrcDeployEvent(srcDeployBlock);
+      const srcEvent = await srcEscrowFactory.getSrcDeployEvent(
+        srcDeployBlockNumber
+      );
       console.log("Source deployment event fetched.");
       console.log("Constructing destination escrow immutables...");
       srcImmutables = srcEvent[0];

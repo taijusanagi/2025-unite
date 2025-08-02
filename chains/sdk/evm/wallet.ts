@@ -102,7 +102,9 @@ export class Wallet {
         )
     }
 
-    async send(param: TransactionRequest): Promise<{txHash: string; blockTimestamp: bigint; blockHash: string}> {
+    async send(
+        param: TransactionRequest
+    ): Promise<{txHash: string; blockNumber: number; blockTimestamp: bigint; blockHash: string}> {
         const res = await this.signer.sendTransaction({
             ...param,
             // gasLimit: 500_000,
@@ -118,6 +120,7 @@ export class Wallet {
 
             return {
                 txHash: receipt.hash,
+                blockNumber: block.number,
                 blockTimestamp: BigInt(block.timestamp),
                 blockHash: receipt.blockHash as string
             }

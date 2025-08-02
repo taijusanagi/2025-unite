@@ -35,7 +35,7 @@ export class EscrowFactory {
     }
 
     public async getSrcDeployEvent(
-        blockHash: string,
+        blockNumber: number,
         retries = 10,
         delayMs = 5000
         //@ts-ignore
@@ -45,7 +45,8 @@ export class EscrowFactory {
         for (let i = 0; i < retries; i++) {
             try {
                 const logs = await this.provider.getLogs({
-                    blockHash,
+                    fromBlock: blockNumber,
+                    toBlock: blockNumber,
                     address: this.address,
                     topics: [event.topicHash]
                 })

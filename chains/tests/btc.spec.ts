@@ -210,7 +210,7 @@ describe('btc', () => {
             const fillAmount = order.makingAmount
             console.log(`[${evmChainId}] 🧾 Filling order ${orderHash} with amount ${fillAmount}`)
 
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmResolver.send(
+            const {txHash: orderFillHash, blockNumber: srcDeployBlockNumber} = await evmResolver.send(
                 resolverContract.deploySrc(
                     evmChainId,
                     evm.lop,
@@ -225,7 +225,7 @@ describe('btc', () => {
             )
             console.log(`[${evmChainId}] ✅ Order filled in tx ${orderFillHash}`)
 
-            const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
+            const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlockNumber)
             const dstImmutables = srcEscrowEvent[0]
                 .withComplement(srcEscrowEvent[1])
                 .withTaker(new Address(resolverContract.dstAddress))
