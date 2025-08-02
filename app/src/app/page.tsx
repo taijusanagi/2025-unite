@@ -24,7 +24,12 @@ import {
 import { patchedDomain, getOrderHashWithPatch } from "@sdk/evm/patch";
 import IWETHContract from "@sdk/evm/contracts/IWETH.json";
 
-import { addressToEthAddressFormat, publicKeyToAddress } from "@sdk/btc";
+import {
+  addressToEthAddressFormat,
+  BtcProvider,
+  createDstHtlcScript,
+  publicKeyToAddress,
+} from "@sdk/btc";
 
 import * as bitcoin from "bitcoinjs-lib";
 import ECPairFactory from "ecpair";
@@ -57,7 +62,7 @@ export default function Home() {
   const { address: evmConnectedAddress } = useAccount();
 
   // State for BTC connection
-  const [btcUserWallet, setBtcUserWallet] = useState<BtcWallet | null>(null);
+  const [btcUser, setBtcUser] = useState<BtcWallet | null>(null);
 
   // State for the modals
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
@@ -73,11 +78,11 @@ export default function Home() {
       try {
         const network = bitcoin.networks.testnet;
         const wallet = walletFromWIF(savedKey, network);
-        setBtcUserWallet(wallet);
+        setBtcUser(wallet);
       } catch (error) {
         console.error("Failed to load/validate BTC private key:", error);
         localStorage.removeItem("btcPrivateKey");
-        setBtcUserWallet(null);
+        setBtcUser(null);
       }
     }
   }, []);
@@ -102,7 +107,7 @@ export default function Home() {
       const wallet = walletFromWIF(privateKey, network);
 
       localStorage.setItem("btcPrivateKey", privateKey);
-      setBtcUserWallet(wallet);
+      setBtcUser(wallet);
       setIsBtcConnectModalOpen(false);
     } catch (e) {
       console.error(e);
@@ -110,7 +115,7 @@ export default function Home() {
         "Invalid Bitcoin Testnet private key (WIF format). Please check and try again."
       );
       localStorage.removeItem("btcPrivateKey");
-      setBtcUserWallet(null);
+      setBtcUser(null);
     }
   };
 
@@ -130,13 +135,13 @@ export default function Home() {
       return;
     }
 
-    if (fromChain.type === "btc" && !btcUserWallet) {
+    if (fromChain.type === "btc" && !btcUser) {
       alert("Please connect your BTC wallet to place an order.");
       btcConnectWallet();
       return;
     }
 
-    if (toChain.type === "btc" && !btcUserWallet) {
+    if (toChain.type === "btc" && !btcUser) {
       alert("Please connect your BTC wallet to when destination is BTC.");
       btcConnectWallet();
       return;
@@ -301,7 +306,7 @@ export default function Home() {
       if (config[dstChainId].type == "btc") {
         // @ts-ignore
         order.inner.inner.receiver = new Address(
-          addressToEthAddressFormat(btcUserWallet!.address)
+          addressToEthAddressFormat(btcUser!.address)
         );
       }
 
@@ -339,7 +344,7 @@ export default function Home() {
             order: order.build(),
             extension: order.extension,
             signature,
-            btcUserPublicKey: btcUserWallet!.publicKey,
+            btcUserPublicKey: btcUser!.publicKey,
           },
           (_, value) => (typeof value === "bigint" ? value.toString() : value)
         ),
@@ -368,6 +373,98 @@ export default function Home() {
           break;
         }
         await new Promise((r) => setTimeout(r, 3000));
+      }
+
+      // 5.5 BTC Claim
+      if (config[dstChainId].type === "btc") {
+        const dstWithdrawParamsRes = await fetch(
+          `/api/relayer/orders/${hash}/btc/dst-withdraw-params`,
+          {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          }
+        );
+
+        if (!dstWithdrawParamsRes.ok)
+          throw new Error("Failed to fetch BTC desination withdraw params");
+
+        const dstWithdrawParamsJson = await dstWithdrawParamsRes.json();
+        const network = bitcoin.networks.testnet;
+        const btcProvider = new BtcProvider(config[99999].rpc);
+        const spendPsbt = new bitcoin.Psbt({
+          network,
+        });
+        const rawTxHex = await await btcProvider.getRawTransactionHex(
+          dstWithdrawParamsJson.dstEscrowAddress
+        );
+        const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
+          BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
+        ).toDstTimeLocks();
+
+        const htlcScript = createDstHtlcScript(
+          hash,
+          hashLock.sha256,
+          dstTimeLocks.privateWithdrawal,
+          dstTimeLocks.privateCancellation,
+          btcUser!.publicKey,
+          dstWithdrawParamsJson.resolverPublicKey
+        );
+
+        spendPsbt.setLocktime(dstTimeLocks.privateWithdrawal);
+        spendPsbt.addInput({
+          hash: dstWithdrawParamsJson.dstEscrowAddress,
+          index: 0,
+          nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+          redeemScript: htlcScript,
+          sequence: 0xfffffffe,
+        });
+
+        const redeemFee = 1000;
+        const redeemValue =
+          dstWithdrawParamsJson.dstImmutables.amount - redeemFee;
+
+        if (redeemValue <= 0) {
+          console.error(`❌ Not enough value to redeem HTLC.`);
+          return;
+        }
+
+        spendPsbt.addOutput({
+          address: btcUser!.address,
+          value: redeemValue,
+        });
+
+        spendPsbt.signInput(0, {
+          publicKey: btcUser!.publicKey,
+          sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
+        });
+
+        spendPsbt.finalizeInput(0, (_: number, input: any) => {
+          const signature = input.partialSig[0].signature;
+
+          const unlockingScript = bitcoin.script.compile([
+            signature,
+            secret,
+            bitcoin.opcodes.OP_TRUE,
+          ]);
+
+          const payment = bitcoin.payments.p2sh({
+            redeem: {
+              input: unlockingScript,
+              output: htlcScript,
+            },
+          });
+
+          return {
+            finalScriptSig: payment.input,
+            finalScriptWitness: undefined,
+          };
+        });
+
+        const finalTxHex = spendPsbt.extractTransaction().toHex();
+        const finalTxId = await btcProvider.broadcastTx(finalTxHex);
+
+        console.log("🎉 Maker successfully claimed BTC from HTLC!");
+        console.log("✅ Redemption TXID:", finalTxId);
       }
 
       // 6. Submit secret
@@ -432,20 +529,20 @@ export default function Home() {
             )}
 
             {/* Show BTC wallet if connected */}
-            {btcUserWallet && (
+            {btcUser && (
               <div>
                 <button
                   onClick={() => setIsBtcAccountModalOpen(true)}
                   className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white hover:bg-gray-700 cursor-pointer font-mono"
                 >
-                  {btcUserWallet.address.slice(0, 6)}...
-                  {btcUserWallet.address.slice(-4)}
+                  {btcUser.address.slice(0, 6)}...
+                  {btcUser.address.slice(-4)}
                 </button>
               </div>
             )}
 
             {/* Show a connect button if EITHER wallet is not connected */}
-            {(!evmsigner || !btcUserWallet) && (
+            {(!evmsigner || !btcUser) && (
               <button
                 onClick={() => setIsConnectModalOpen(true)}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
@@ -618,7 +715,7 @@ export default function Home() {
           alert("Gattai Wallet connection not implemented yet.")
         }
         isEvmConnected={!!evmsigner}
-        isBtcConnected={!!btcUserWallet}
+        isBtcConnected={!!btcUser}
       />
       <BtcConnectModal
         isOpen={isBtcConnectModalOpen}
@@ -628,11 +725,11 @@ export default function Home() {
       <BtcAccountModal
         isOpen={isBtcAccountModalOpen}
         onClose={() => setIsBtcAccountModalOpen(false)}
-        address={btcUserWallet?.address || ""}
-        publicKey={btcUserWallet?.publicKey.toString("hex") || ""}
+        address={btcUser?.address || ""}
+        publicKey={btcUser?.publicKey.toString("hex") || ""}
         onDisconnect={() => {
           localStorage.removeItem("btcPrivateKey");
-          setBtcUserWallet(null);
+          setBtcUser(null);
           setIsBtcAccountModalOpen(false);
         }}
       />
