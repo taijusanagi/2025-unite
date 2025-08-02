@@ -4,13 +4,13 @@ import "@rainbow-me/rainbowkit/styles.css";
 
 import { getDefaultConfig, RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { WagmiProvider } from "wagmi";
-import { baseSepolia, monadTestnet } from "wagmi/chains";
+import { baseSepolia, monadTestnet, etherlinkTestnet } from "wagmi/chains";
 import { QueryClientProvider, QueryClient } from "@tanstack/react-query";
 
 const config = getDefaultConfig({
   appName: "GattaiSwap",
   projectId: "cffe9608a02c00c7947b9afd9dacbc70",
-  chains: [baseSepolia, monadTestnet],
+  chains: [baseSepolia, monadTestnet, etherlinkTestnet],
   ssr: true,
 });
 

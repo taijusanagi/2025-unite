@@ -47,10 +47,10 @@ https://testnet.monadexplorer.com/address/0xf927004F33f26CaA1763BB21454Ef36AA76e
 ## Etherlink
 
 == Logs ==
-LimitOrderProtocol deployed at: 0xCedd5a00574afa3d6e122497Cb83c3BFAC4C31F2
-EscrowFactory deployed at: 0xB12Ac6646F125E1a2466E5539Dd70499fF0d8A17
-Resolver deployed at: 0x43a16C05A1E97551490059cf6866a7cF08942121
-ERC20True deployed at: 0x51370E05f8f61875C7F41bCd181e8D8660eF4af8
+LimitOrderProtocol deployed at: 0x64BE4a6b41A5910b56e26c587454cDc023614e92
+EscrowFactory deployed at: 0x7c054c1081F747cbC39Aa4899A53378eA66b3Dea
+Resolver deployed at: 0xF920618C3CF765cE5570A15665C50b3e3f287352
+ERC20True deployed at: 0x436b7B4d6cBe36A8cE531b5C5DAa3Eb369035EF4
 
 ## Patch on SDK
 
