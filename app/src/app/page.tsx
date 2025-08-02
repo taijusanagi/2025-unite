@@ -91,26 +91,6 @@ export default function Home() {
     }
   }, []);
 
-  useEffect(() => {
-    if (evmConnectedAddress && isConnectModalOpen) {
-      setIsConnectModalOpen(false);
-    }
-  }, [evmConnectedAddress, isConnectModalOpen]);
-
-  useEffect(() => {
-    if (connectedWalletType === "btc") {
-      const btcChain = chains.find((c) => c.type === "btc");
-      if (fromChain.type !== "btc" && btcChain) {
-        setFromChain(btcChain);
-      }
-    } else if (connectedWalletType === "evm") {
-      const evmChain = chains.find((c) => c.type === "evm");
-      if (fromChain.type !== "evm" && evmChain) {
-        setFromChain(evmChain);
-      }
-    }
-  }, [connectedWalletType, fromChain, chains]);
-
   // Renamed from handleConnectEVM
   const evmConnectWallet = () => {
     if (openConnectModal) {
@@ -436,33 +416,46 @@ export default function Home() {
     <>
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 text-white flex flex-col">
         {/* Header */}
-        <div className="flex justify-between items-center px-6 py-4">
+        <div className="flex justify-end md:justify-between items-center px-4 py-4">
           <div
-            className="text-2xl font-bold text-blue-400 cursor-pointer"
+            className="hidden md:block text-2xl font-bold text-blue-400 cursor-pointer"
             onClick={() => showDex && setShowDex(false)}
           >
             GattaiSwap
           </div>
-          {evmsigner ? (
-            <ConnectButton chainStatus="icon" accountStatus="avatar" />
-          ) : btcUserWallet ? (
-            <div>
+          <div className="flex items-center gap-4">
+            {/* Show EVM wallet if connected */}
+            {evmsigner && (
+              <ConnectButton
+                chainStatus="icon"
+                accountStatus="avatar"
+                showBalance={false}
+              />
+            )}
+
+            {/* Show BTC wallet if connected */}
+            {btcUserWallet && (
+              <div>
+                <button
+                  onClick={() => setIsBtcAccountModalOpen(true)}
+                  className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white hover:bg-gray-700 cursor-pointer font-mono"
+                >
+                  {btcUserWallet.address.slice(0, 6)}...
+                  {btcUserWallet.address.slice(-4)}
+                </button>
+              </div>
+            )}
+
+            {/* Show a connect button if EITHER wallet is not connected */}
+            {(!evmsigner || !btcUserWallet) && (
               <button
-                onClick={() => setIsBtcAccountModalOpen(true)}
-                className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white hover:bg-gray-700 cursor-pointer font-mono"
+                onClick={() => setIsConnectModalOpen(true)}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
               >
-                {btcUserWallet.address.slice(0, 6)}...
-                {btcUserWallet.address.slice(-4)}
+                Connect
               </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsConnectModalOpen(true)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
-            >
-              Connect
-            </button>
-          )}
+            )}
+          </div>
         </div>
 
         {/* 2. Hero */}
@@ -663,6 +656,8 @@ export default function Home() {
         onConnectGattai={() =>
           alert("Gattai Wallet connection not implemented yet.")
         }
+        isEvmConnected={!!evmsigner}
+        isBtcConnected={!!btcUserWallet}
       />
       <BtcConnectModal
         isOpen={isBtcConnectModalOpen}

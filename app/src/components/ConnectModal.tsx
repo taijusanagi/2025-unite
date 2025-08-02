@@ -1,4 +1,3 @@
-// components/ConnectModal.tsx
 "use client";
 import React from "react";
 
@@ -8,6 +7,8 @@ interface ConnectModalProps {
   onConnectEVM: () => void;
   onConnectBTC: () => void;
   onConnectGattai: () => void;
+  isEvmConnected: boolean;
+  isBtcConnected: boolean;
 }
 
 const ConnectModal: React.FC<ConnectModalProps> = ({
@@ -16,8 +17,18 @@ const ConnectModal: React.FC<ConnectModalProps> = ({
   onConnectEVM,
   onConnectBTC,
   onConnectGattai,
+  isEvmConnected,
+  isBtcConnected,
 }) => {
   if (!isOpen) return null;
+
+  // --- STYLE CHANGE IS HERE ---
+  // This new style provides a subtle, "grayed-out" look.
+  const connectedClasses =
+    "w-full py-2 bg-slate-800 border border-slate-700 text-slate-500 rounded-md cursor-not-allowed flex items-center justify-center gap-2";
+
+  const defaultClasses =
+    "w-full py-2 rounded-md transition cursor-pointer font-semibold";
 
   return (
     <div
@@ -35,7 +46,7 @@ const ConnectModal: React.FC<ConnectModalProps> = ({
           </h3>
           <button
             onClick={onConnectGattai}
-            className="w-full py-2 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"
+            className={`${defaultClasses} bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600`}
           >
             Gattai Wallet
           </button>
@@ -47,19 +58,31 @@ const ConnectModal: React.FC<ConnectModalProps> = ({
             Connect Wallet on Specific Chain
           </h3>
 
-          <button
-            onClick={onConnectEVM}
-            className="w-full py-2 bg-blue-600 rounded-md hover:bg-blue-700 transition cursor-pointer font-semibold"
-          >
-            EVM Wallet
-          </button>
+          {isEvmConnected ? (
+            <button className={connectedClasses} disabled>
+              EVM Wallet Connected
+            </button>
+          ) : (
+            <button
+              onClick={onConnectEVM}
+              className={`${defaultClasses} bg-blue-600 hover:bg-blue-700`}
+            >
+              EVM Wallet
+            </button>
+          )}
 
-          <button
-            onClick={onConnectBTC}
-            className="w-full py-2 bg-yellow-600 rounded-md hover:bg-yellow-700 transition cursor-pointer font-semibold"
-          >
-            BTC Wallet
-          </button>
+          {isBtcConnected ? (
+            <button className={connectedClasses} disabled>
+              BTC Wallet Connected
+            </button>
+          ) : (
+            <button
+              onClick={onConnectBTC}
+              className={`${defaultClasses} bg-yellow-600 hover:bg-yellow-700`}
+            >
+              BTC Wallet
+            </button>
+          )}
         </div>
 
         {/* Close Button */}
