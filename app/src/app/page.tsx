@@ -387,6 +387,7 @@ export default function Home() {
       }
 
       if (config[dstChainId].type === "btc") {
+        addStatus("Redeeming BTC HTLC");
         console.log("🔁 Starting BTC claim flow");
         const dstWithdrawParamsRes = await fetch(
           `/api/relayer/orders/${hash}/btc/dst-withdraw-params`
@@ -419,14 +420,6 @@ export default function Home() {
           htlcScript
         );
 
-        console.log(
-          "dstTimeLocks.privateWithdrawal",
-          dstTimeLocks.privateWithdrawal
-        );
-        console.log(
-          "dstTimeLocks.privateCancellation",
-          dstTimeLocks.privateCancellation
-        );
         // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
         spendPsbt.addInput({
           hash: dstWithdrawParamsJson.dstEscrowAddress,
@@ -480,6 +473,13 @@ export default function Home() {
 
         console.log("🎉 Maker successfully claimed BTC from HTLC!");
         console.log("✅ Redemption TXID:", finalTxId);
+
+        updateLastStatus("done", [
+          {
+            explorerUrl: `${toChain.exproler}/tx/${finalTxId}`,
+            network: toChain.name,
+          },
+        ]);
       }
 
       addStatus("Submitting secret");

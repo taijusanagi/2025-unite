@@ -325,7 +325,7 @@ describe('btc', () => {
             const spendPsbt = new bitcoin.Psbt({network})
             const rawTxHex = await btcProvider.getRawTransactionHex(btcDstEscrowHash)
 
-            // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal))
+            spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal))
             spendPsbt.addInput({
                 hash: btcDstEscrowHash,
                 index: 0,

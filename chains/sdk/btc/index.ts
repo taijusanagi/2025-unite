@@ -169,39 +169,48 @@ export class BtcProvider {
         }
     }
 }
+
 export function createDstHtlcScript(
     orderHashHex: string,
     hashLockSha256: Buffer,
     privateWithdrawal: number | bigint,
     privateCancellation: number | bigint,
     btcUserPublicKey: Buffer,
-    btcResolverPublicKey: Buffer
+    btcResolverPublicKey: Buffer,
+    lockTillPrivateWithdrawal: boolean = true // optional flag
 ): Buffer {
-    console.log('orderHashHex', orderHashHex)
-    console.log('hashLockSha256', hashLockSha256.toString('hex'))
-    console.log('privateWithdrawal', privateWithdrawal)
-    console.log('privateCancellation', privateCancellation)
-    console.log('btcUserPublicKey', btcUserPublicKey.toString('hex'))
-    console.log('btcResolverPublicKey', btcResolverPublicKey.toString('hex'))
+    const scriptChunks: (Buffer | number)[] = []
 
-    return bitcoin.script.compile([
-        Buffer.from(hexToUint8Array(orderHashHex)),
-        bitcoin.opcodes.OP_DROP,
-        // bitcoin.script.number.encode(Number(privateWithdrawal)),
-        // bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-        // bitcoin.opcodes.OP_DROP,
-        bitcoin.opcodes.OP_IF,
-        bitcoin.opcodes.OP_SHA256,
-        hashLockSha256,
-        bitcoin.opcodes.OP_EQUALVERIFY,
-        btcUserPublicKey,
-        bitcoin.opcodes.OP_CHECKSIG,
-        bitcoin.opcodes.OP_ELSE,
-        bitcoin.script.number.encode(Number(privateCancellation)),
-        bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY,
-        bitcoin.opcodes.OP_DROP,
-        btcResolverPublicKey,
-        bitcoin.opcodes.OP_CHECKSIG,
-        bitcoin.opcodes.OP_ENDIF
-    ])
+    // Always include a unique order hash at the start for protection
+    scriptChunks.push(Buffer.from(hexToUint8Array(orderHashHex)))
+    scriptChunks.push(bitcoin.opcodes.OP_DROP)
+
+    if (lockTillPrivateWithdrawal) {
+        // Optional timelock enforced at script level
+        scriptChunks.push(bitcoin.script.number.encode(Number(privateWithdrawal)))
+        scriptChunks.push(bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY)
+        scriptChunks.push(bitcoin.opcodes.OP_DROP)
+    } else {
+        console.warn(
+            '⚠️ lockTillPrivateWithdrawal is disabled — for demo/UI only. Real usage should enforce start time.'
+        )
+    }
+
+    scriptChunks.push(bitcoin.opcodes.OP_IF)
+    scriptChunks.push(bitcoin.opcodes.OP_SHA256)
+    scriptChunks.push(hashLockSha256)
+    scriptChunks.push(bitcoin.opcodes.OP_EQUALVERIFY)
+    scriptChunks.push(btcUserPublicKey)
+    scriptChunks.push(bitcoin.opcodes.OP_CHECKSIG)
+
+    scriptChunks.push(bitcoin.opcodes.OP_ELSE)
+    scriptChunks.push(bitcoin.script.number.encode(Number(privateCancellation)))
+    scriptChunks.push(bitcoin.opcodes.OP_CHECKLOCKTIMEVERIFY)
+    scriptChunks.push(bitcoin.opcodes.OP_DROP)
+    scriptChunks.push(btcResolverPublicKey)
+    scriptChunks.push(bitcoin.opcodes.OP_CHECKSIG)
+
+    scriptChunks.push(bitcoin.opcodes.OP_ENDIF)
+
+    return bitcoin.script.compile(scriptChunks)
 }

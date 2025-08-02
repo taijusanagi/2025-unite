@@ -181,7 +181,8 @@ export async function POST(
         dstTimeLocks.privateWithdrawal,
         dstTimeLocks.privateCancellation,
         Buffer.from(btcUserPublicKey, "hex"),
-        btcResolver.publicKey
+        btcResolver.publicKey,
+        false
       );
       const p2sh = bitcoin.payments.p2sh({
         redeem: { output: htlcScriptBuffer, network },
