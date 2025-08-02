@@ -88,9 +88,11 @@ export async function POST(
       console.log(`BTC funding tx broadcasted: ${srcDeployHash}`);
 
       console.log("Waiting for BTC transaction confirmation...");
-      const { confirmedAt } = await btcProvider.waitForTxConfirmation(
-        srcDeployHash
-      );
+      // to make the demo easier
+      // const { confirmedAt } = await btcProvider.waitForTxConfirmation(
+      //   srcDeployHash
+      // );
+      const confirmedAt = Math.floor(Date.now() / 1000);
       console.log(`BTC tx confirmed at timestamp: ${confirmedAt}`);
 
       htlcScript = htlcScriptHex;
@@ -100,7 +102,7 @@ export async function POST(
       const timeLocksWithDeployment = Sdk.TimeLocks.fromBigInt(
         setDeployedAt(
           //@ts-ignore
-          order.inner.fusionExtension.timeLocks.build,
+          order.inner.fusionExtension.timeLocks.build(),
           BigInt(confirmedAt)
         )
       );
@@ -108,13 +110,13 @@ export async function POST(
       srcImmutables = Sdk.Immutables.new({
         orderHash: hash,
         // @ts-ignore
-        hashLock: order.inner.fusionExtionsion.hashLockInfo,
+        hashLock: order.inner.fusionExtension.hashLockInfo,
         maker: order.maker,
         taker: new Address(addressToEthAddressFormat(btcResolver.address!)),
         token: order.makerAsset,
         amount: order.makingAmount,
         // @ts-ignore
-        safetyDeposit: order.inner.fusionExtionsion.srcSafetyDeposit,
+        safetyDeposit: order.inner.fusionExtension.srcSafetyDeposit,
         timeLocks: timeLocksWithDeployment,
       });
 
@@ -123,7 +125,7 @@ export async function POST(
         token: order.takerAsset,
         amount: order.takingAmount,
         // @ts-ignore
-        safetyDeposit: order.inner.fusionExtionsion.dstSafetyDeposit,
+        safetyDeposit: order.inner.fusionExtension.dstSafetyDeposit,
       });
 
       // Destination taker is the EVM resolver contract
