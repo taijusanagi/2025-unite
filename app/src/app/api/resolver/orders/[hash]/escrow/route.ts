@@ -13,6 +13,7 @@ import * as bitcoin from "bitcoinjs-lib";
 import { hexToUint8Array } from "@1inch/byte-utils";
 import {
   addressToEthAddressFormat,
+  BtcProvider,
   publicKeyToAddress,
   walletFromWIF,
 } from "@sdk/btc";
@@ -20,7 +21,7 @@ import {
 const ethPrivateKey = process.env.ETH_PRIVATE_KEY || "0x";
 const btcPrivateKey = process.env.BTC_PRIVATE_KEY || "0x";
 
-const network = bitcoin.networks.regtest;
+const network = bitcoin.networks.testnet;
 
 export async function POST(
   _req: Request,
@@ -53,6 +54,8 @@ export async function POST(
       btcUserRecipientKey,
     } = await response.json();
     const order = Sdk.CrossChainOrder.fromDataAndExtension(_order, extension);
+
+    const btcProvider = new BtcProvider(config[99999].rpc);
 
     const evmResolverContract = new Resolver(
       config[srcChainId].resolver!,
@@ -185,14 +188,14 @@ export async function POST(
       console.log("✅ HTLC P2SH Address:", p2sh.address);
 
       // === Taker (resolver) funds the HTLC ===
-      const utxos = await getUtxos(btcResolver.address!);
+      const utxos = await btcProvider.getUtxos(btcResolver.address!);
       if (!utxos.length) {
         console.error("❌ No UTXOs available to fund HTLC.");
         return;
       }
 
       const amount = Number(order.takingAmount); // Match maker's amount or adjust as needed
-      const fee = 10000;
+      const fee = 1000;
       const totalInput = utxos.reduce((sum, u) => sum + u.value, 0);
       const change = totalInput - amount - fee;
 
@@ -239,14 +242,18 @@ export async function POST(
       psbt.finalizeAllInputs();
 
       const txHex = psbt.extractTransaction().toHex();
-      const btcDstEscrowHash = await broadcastTx(txHex);
+      const btcDstEscrowHash = await btcProvider.broadcastTx(txHex);
 
       console.log("✅ Taker has funded HTLC:");
       console.log("🔗 btcDstEscrowHash:", btcDstEscrowHash);
 
-      dstEscrowAddress = "";
-      dstDeployedAt = 0n;
-      dstDeployHash = "";
+      const { confirmedAt } = await btcProvider.waitForTxConfirmation(
+        btcDstEscrowHash
+      );
+
+      dstEscrowAddress = btcDstEscrowHash;
+      dstDeployedAt = BigInt(confirmedAt);
+      dstDeployHash = btcDstEscrowHash;
     } else {
       console.log("Destination chain: EVM");
       const dstProvider = new JsonRpcProvider(

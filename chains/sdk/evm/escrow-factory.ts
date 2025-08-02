@@ -34,37 +34,58 @@ export class EscrowFactory {
         )
     }
 
-    //@ts-ignore
-    public async getSrcDeployEvent(blockHash: string): Promise<[Sdk.Immutables, Sdk.DstImmutablesComplement]> {
+    public async getSrcDeployEvent(
+        blockHash: string,
+        retries = 10,
+        delayMs = 5000
+        //@ts-ignore
+    ): Promise<[Sdk.Immutables, Sdk.DstImmutablesComplement]> {
         const event = this.iface.getEvent('SrcEscrowCreated')!
-        const logs = await this.provider.getLogs({
-            blockHash,
-            address: this.address,
-            topics: [event.topicHash]
-        })
 
-        const [data] = logs.map((l) => this.iface.decodeEventLog(event, l.data))
+        for (let i = 0; i < retries; i++) {
+            try {
+                const logs = await this.provider.getLogs({
+                    blockHash,
+                    address: this.address,
+                    topics: [event.topicHash]
+                })
 
-        const immutables = data.at(0)
-        const complement = data.at(1)
+                if (logs.length === 0) throw new Error('No logs found')
 
-        return [
-            Sdk.Immutables.new({
-                orderHash: immutables[0],
-                hashLock: Sdk.HashLock.fromString(immutables[1]),
-                maker: Sdk.Address.fromBigInt(immutables[2]),
-                taker: Sdk.Address.fromBigInt(immutables[3]),
-                token: Sdk.Address.fromBigInt(immutables[4]),
-                amount: immutables[5],
-                safetyDeposit: immutables[6],
-                timeLocks: Sdk.TimeLocks.fromBigInt(immutables[7])
-            }),
-            Sdk.DstImmutablesComplement.new({
-                maker: Sdk.Address.fromBigInt(complement[0]),
-                amount: complement[1],
-                token: Sdk.Address.fromBigInt(complement[2]),
-                safetyDeposit: complement[3]
-            })
-        ]
+                const [data] = logs.map((l) => this.iface.decodeEventLog(event, l.data))
+
+                const immutables = data.at(0)
+                const complement = data.at(1)
+
+                return [
+                    Sdk.Immutables.new({
+                        orderHash: immutables[0],
+                        hashLock: Sdk.HashLock.fromString(immutables[1]),
+                        maker: Sdk.Address.fromBigInt(immutables[2]),
+                        taker: Sdk.Address.fromBigInt(immutables[3]),
+                        token: Sdk.Address.fromBigInt(immutables[4]),
+                        amount: immutables[5],
+                        safetyDeposit: immutables[6],
+                        timeLocks: Sdk.TimeLocks.fromBigInt(immutables[7])
+                    }),
+                    Sdk.DstImmutablesComplement.new({
+                        maker: Sdk.Address.fromBigInt(complement[0]),
+                        amount: complement[1],
+                        token: Sdk.Address.fromBigInt(complement[2]),
+                        safetyDeposit: complement[3]
+                    })
+                ]
+            } catch (err) {
+                console.warn(`Attempt ${i + 1}/${retries} to getSrcDeployEvent failed:`, err)
+                if (i < retries - 1) {
+                    await new Promise((res) => setTimeout(res, delayMs))
+                } else {
+                    throw new Error(`getSrcDeployEvent failed after ${retries} attempts: ${err}`)
+                }
+            }
+        }
+
+        // This is technically unreachable
+        throw new Error('Unexpected retry logic flow')
     }
 }

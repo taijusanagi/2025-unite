@@ -3,7 +3,6 @@ import {BITCOIN_CLI} from './test-utils/btc'
 import {expect, jest} from '@jest/globals'
 import Sdk from '@1inch/cross-chain-sdk'
 import * as bitcoin from 'bitcoinjs-lib'
-import axios from 'axios'
 
 import {randomBytes} from 'crypto'
 import {Chain} from './test-utils/evm'
