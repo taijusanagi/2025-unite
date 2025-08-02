@@ -441,13 +441,13 @@ describe('btc', () => {
 
             // use sdk to make order object
             const order = Sdk.CrossChainOrder.new(
-                new Address(evm.escrowFactory),
+                new Address(nullAddress),
                 {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address(addressToEthAddressFormat(btcUser.address!)),
                     makingAmount: 10000n,
                     takingAmount: 9999n,
-                    makerAsset: new Address(evm.trueERC20), // ths is dummy now
+                    makerAsset: new Address(nullAddress), // ths is dummy now
                     takerAsset: new Address(evm.weth),
                     receiver: new Address(await evmUser.getAddress())
                 },
@@ -476,7 +476,7 @@ describe('btc', () => {
                     }),
                     whitelist: [
                         {
-                            address: new Address(evm.resolver),
+                            address: new Address(nullAddress),
                             allowFrom: 0n
                         }
                     ],
@@ -509,29 +509,6 @@ describe('btc', () => {
                 btcResolver.publicKey,
                 true
             )
-            // const sequenceValue = bip68.encode({seconds: lockInSeconds, blocks: undefined})
-            // const htlcScript = bitcoin.script.compile([
-            //     Buffer.from(hexToUint8Array(orderHash)), // include orderhash here to maker sign it
-            //     bitcoin.opcodes.OP_DROP,
-            //     bitcoin.script.number.encode(sequenceValue),
-            //     bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
-            //     bitcoin.opcodes.OP_DROP,
-            //     bitcoin.opcodes.OP_IF,
-            //     bitcoin.opcodes.OP_SHA256,
-            //     hashLock.sha256,
-            //     bitcoin.opcodes.OP_EQUALVERIFY,
-            //     btcResolver.publicKey,
-            //     bitcoin.opcodes.OP_CHECKSIG,
-            //     bitcoin.opcodes.OP_ELSE,
-            //     bitcoin.script.number.encode(
-            //         bip68.encode({seconds: Number(timeLocks._srcCancellation), blocks: undefined})
-            //     ),
-            //     bitcoin.opcodes.OP_CHECKSEQUENCEVERIFY,
-            //     bitcoin.opcodes.OP_DROP,
-            //     btcUser.publicKey,
-            //     bitcoin.opcodes.OP_CHECKSIG,
-            //     bitcoin.opcodes.OP_ENDIF
-            // ])
 
             const p2sh = bitcoin.payments.p2sh({
                 redeem: {output: htlcScript, network},

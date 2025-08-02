@@ -20,6 +20,7 @@ import {
   dummySrcChainId,
   dummyDstChainId,
   nativeTokenAddress,
+  nullAddress,
 } from "@sdk/evm/constants";
 import { patchedDomain, getOrderHashWithPatch } from "@sdk/evm/patch";
 import IWETHContract from "@sdk/evm/contracts/IWETH.json";
@@ -28,6 +29,7 @@ import {
   addressToEthAddressFormat,
   BtcProvider,
   createDstHtlcScript,
+  createSrcHtlcScript,
   publicKeyToAddress,
 } from "@sdk/btc";
 
@@ -37,6 +39,9 @@ import * as ecc from "tiny-secp256k1";
 
 import { walletFromWIF, BtcWallet } from "@sdk/btc";
 
+const bip68 = require("bip68");
+
+const network = bitcoin.networks.testnet;
 const ECPair = ECPairFactory(ecc);
 const { Address } = Sdk;
 
@@ -190,6 +195,7 @@ export default function Home() {
 
       const srcChainId = fromChain.chainId;
       const dstChainId = toChain.chainId;
+      const btcProvider = new BtcProvider(config[99999].rpc);
 
       if (config[srcChainId].type === "evm") {
         const srcWrappedNativeTokenContract = new Contract(
@@ -254,31 +260,53 @@ export default function Home() {
       console.log("🔐 Hash lock created", hashLock);
 
       const timestamp = BigInt(Math.floor(Date.now() / 1000));
+
+      let escrowFacotryAddress = new Address(nullAddress);
+      if (config[srcChainId].type === "evm") {
+        escrowFacotryAddress = new Address(config[srcChainId].escrowFactory);
+      }
+
+      let makerAsset = new Address(nullAddress);
+      if (config[srcChainId].type === "evm") {
+        makerAsset = new Address(config[srcChainId].wrappedNative!);
+      }
+
+      let resolverAddress = new Address(nativeTokenAddress);
+      if (config[srcChainId].type === "evm") {
+        resolverAddress = new Address(config[srcChainId].resolver!);
+      }
+
       let takerAsset = new Address(nativeTokenAddress);
       if (config[dstChainId].type === "evm") {
         takerAsset = new Address(config[dstChainId].wrappedNative!);
       }
 
+      let receiver;
+      if (config[dstChainId].type === "btc") {
+        receiver = new Address(addressToEthAddressFormat(btcUser!.address));
+      }
+
       const order = Sdk.CrossChainOrder.new(
-        new Address(config[srcChainId].escrowFactory),
+        escrowFacotryAddress,
         {
           salt: Sdk.randBigInt(1000n),
           maker: new Address(evmSigner!.address),
           makingAmount: BigInt(amount),
           takingAmount: BigInt(amount),
-          makerAsset: new Address(config[srcChainId].wrappedNative!),
+          makerAsset,
           takerAsset,
+          receiver,
         },
         {
           hashLock: hashLock.keccak256,
           timeLocks: Sdk.TimeLocks.new({
             srcWithdrawal: 10n,
-            srcPublicWithdrawal: 1209n,
-            srcCancellation: 1210n,
-            srcPublicCancellation: 1211n,
+            srcPublicWithdrawal: 1023n,
+            srcCancellation: 1024n, // must be 512, 1024... to set relative time check in bitcoin (only when btc = src)
+            srcPublicCancellation: 1225n,
             dstWithdrawal: 10n,
-            dstPublicWithdrawal: 609n,
-            dstCancellation: 610n,
+            dstPublicWithdrawal: 511n,
+            dstCancellation: 512n,
           }),
           srcChainId: dummySrcChainId,
           dstChainId: dummyDstChainId,
@@ -294,7 +322,7 @@ export default function Home() {
           }),
           whitelist: [
             {
-              address: new Address(config[srcChainId].resolver!),
+              address: resolverAddress,
               allowFrom: 0n,
             },
           ],
@@ -307,20 +335,115 @@ export default function Home() {
         }
       );
 
+      // to bypass chain id, set chain id after order creation
       order.inner.fusionExtension.srcChainId = srcChainId;
       order.inner.fusionExtension.dstChainId = dstChainId;
-      order.inner.inner.takerAsset = new Address(config[srcChainId].trueERC20!);
 
-      let signature = "";
-      if (config[dstChainId].type === "btc") {
-        order.inner.inner.receiver = new Address(
-          addressToEthAddressFormat(btcUser!.address)
+      if (config[srcChainId].type === "evm") {
+        // taker asset is replaced by trueERC20 in SDK, so override here
+        order.inner.inner.takerAsset = new Address(
+          config[srcChainId].trueERC20!
         );
       }
+      let signature = "";
 
       console.log("📦 Order constructed:", order);
+      const hash = getOrderHashWithPatch(srcChainId, order, {
+        ...patchedDomain,
+        verifyingContract: config[srcChainId].limitOrderProtocol!,
+      });
+      console.log("📡 Order hash:", hash);
 
-      if (config[srcChainId].type !== "btc") {
+      if (config[srcChainId].type === "btc") {
+        // @ts-ignore
+        const timeLocks = order.inner.fusionExtension.timeLocks;
+
+        const htlcScript = createSrcHtlcScript(
+          hash,
+          hashLock.sha256,
+          timeLocks._srcWithdrawal,
+          timeLocks._srcCancellation,
+          btcUser!.publicKey,
+          btcUser!.publicKey,
+          false
+        );
+
+        const p2sh = bitcoin.payments.p2sh({
+          redeem: { output: htlcScript, network },
+          network,
+        });
+
+        console.log("🧾 HTLC P2SH Address:", p2sh.address);
+
+        const makerPayment = bitcoin.payments.p2wpkh({
+          pubkey: btcUser!.publicKey,
+          network,
+        });
+
+        const fromAddress = makerPayment.address!;
+
+        const utxos = await btcProvider.getUtxos(fromAddress);
+        if (!utxos.length) {
+          console.error("❌ No UTXOs found in maker's wallet.");
+          return;
+        }
+
+        const amount = Number(order.makingAmount);
+        const fee = 10000;
+        const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
+        const change = totalInput - amount - fee;
+
+        if (change < 0) {
+          console.error("❌ Not enough funds to lock BTC and cover the fee.");
+          return;
+        }
+
+        const psbt = new bitcoin.Psbt({ network });
+
+        if (change > 0) {
+          psbt.addOutput({
+            address: fromAddress,
+            value: change,
+          });
+        }
+
+        for (const utxo of utxos) {
+          psbt.addInput({
+            hash: utxo.txid,
+            index: utxo.vout,
+            witnessUtxo: {
+              script: makerPayment.output!,
+              value: utxo.value,
+            },
+          });
+        }
+
+        psbt.addOutput({
+          script: p2sh.output!,
+          value: amount,
+        });
+
+        utxos.forEach((_, idx) => {
+          psbt.signInput(idx, {
+            publicKey: btcUser!.publicKey,
+            sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
+          });
+        });
+
+        psbt.finalizeAllInputs();
+
+        const txHex = psbt.extractTransaction().toHex();
+        // The script includes orderhash, and tx is signed so use this object as signautre
+        signature = JSON.stringify(
+          {
+            txHex,
+            htlcScriptHex: htlcScript.toString("hex"),
+            p2shAddress: p2sh.address!,
+          },
+          null,
+          2
+        );
+      } else {
         const typedData = order.getTypedData(srcChainId);
         console.log("📝 Signing typed data:", typedData);
         signature = await evmSigner!.signTypedData(
@@ -333,17 +456,9 @@ export default function Home() {
           typedData.message
         );
       }
-
       updateLastStatus("done");
 
       addStatus("Submitting order to relayer");
-      const hash = getOrderHashWithPatch(srcChainId, order, {
-        ...patchedDomain,
-        verifyingContract: config[srcChainId].limitOrderProtocol!,
-      });
-
-      console.log("📡 Order hash:", hash);
-
       const res = await fetch("/api/relayer/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -402,15 +517,9 @@ export default function Home() {
         const dstWithdrawParamsJson = await dstWithdrawParamsRes.json();
         console.log("📬 BTC withdraw params:", dstWithdrawParamsJson);
 
-        const network = bitcoin.networks.testnet;
-        const btcProvider = new BtcProvider(config[99999].rpc);
         const rawTxHex = await btcProvider.getRawTransactionHex(
           dstWithdrawParamsJson.dstEscrowAddress
         );
-
-        const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
-          BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
-        ).toDstTimeLocks();
 
         const spendPsbt = new bitcoin.Psbt({ network });
         console.log(
@@ -424,6 +533,10 @@ export default function Home() {
           htlcScript
         );
 
+        // this should work after waiting Median Confirmation Time
+        // const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
+        //   BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
+        // ).toDstTimeLocks();
         // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
         spendPsbt.addInput({
           hash: dstWithdrawParamsJson.dstEscrowAddress,
