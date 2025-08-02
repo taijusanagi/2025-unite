@@ -51,7 +51,7 @@ export async function POST(
       order: _order,
       extension,
       signature,
-      btcRecipientPublicKey,
+      btcUserPublicKey,
     } = await response.json();
     const order = Sdk.CrossChainOrder.fromDataAndExtension(_order, extension);
 
@@ -146,7 +146,7 @@ export async function POST(
       console.log("Destination chain: BTC");
 
       const recipientAddress = publicKeyToAddress(
-        btcRecipientPublicKey,
+        btcUserPublicKey,
         bitcoin.networks.testnet
       );
       const ethFormattedRecipientAddress =
@@ -169,7 +169,7 @@ export async function POST(
         bitcoin.opcodes.OP_SHA256,
         hashLock.sha256,
         bitcoin.opcodes.OP_EQUALVERIFY,
-        btcRecipientPublicKey, // 👤 Maker can claim with secret
+        btcUserPublicKey, // 👤 Maker can claim with secret
         bitcoin.opcodes.OP_CHECKSIG,
         bitcoin.opcodes.OP_ELSE,
         bitcoin.script.number.encode(Number(dstTimeLocks.privateCancellation)),

@@ -51,9 +51,6 @@ export default function Home() {
   const [fromChain, setFromChain] = useState(chains[1]);
   const [toChain, setToChain] = useState(chains[0]);
   const [amount] = useState(5000);
-  const [btcRecipientPublicKey, setBtcRecipientPublicKey] = useState(
-    "02ce09b3d6b374619431656279fb2506fe665404adc39afccb14ca3d8e3c3a0d78"
-  );
 
   const evmsigner = useEthersSigner();
   const connectedChainId = useChainId();
@@ -61,12 +58,6 @@ export default function Home() {
 
   // State for BTC connection
   const [btcUserWallet, setBtcUserWallet] = useState<BtcWallet | null>(null);
-
-  const connectedWalletType = (() => {
-    if (evmsigner) return "evm";
-    if (btcUserWallet) return "btc";
-    return null;
-  })();
 
   // State for the modals
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
@@ -124,18 +115,29 @@ export default function Home() {
   };
 
   const createOrder = async () => {
-    // Check for appropriate wallet connection
+    if (fromChain.chainId === toChain.chainId) {
+      alert("The source and destination networks must be different.");
+      return;
+    }
+
     if (fromChain.type === "evm" && !evmsigner) {
-      alert("Please connect your EVM wallet first.");
-      setIsConnectModalOpen(true);
+      alert("Please connect your EVM wallet to place an order.");
+      evmConnectWallet();
       return;
     }
     if (fromChain.type === "evm" && connectedChainId !== fromChain.chainId) {
       alert("Please switch to the 'From' network in your wallet.");
       return;
     }
+
     if (fromChain.type === "btc" && !btcUserWallet) {
-      alert("Please connect your BTC Testnet wallet first.");
+      alert("Please connect your BTC wallet to place an order.");
+      btcConnectWallet();
+      return;
+    }
+
+    if (toChain.type === "btc" && !btcUserWallet) {
+      alert("Please connect your BTC wallet to when destination is BTC.");
       btcConnectWallet();
       return;
     }
@@ -297,13 +299,9 @@ export default function Home() {
       let signature = "";
 
       if (config[dstChainId].type == "btc") {
-        const recipientAddress = publicKeyToAddress(
-          btcRecipientPublicKey,
-          bitcoin.networks.testnet
-        );
         // @ts-ignore
         order.inner.inner.receiver = new Address(
-          addressToEthAddressFormat(recipientAddress)
+          addressToEthAddressFormat(btcUserWallet!.address)
         );
       }
 
@@ -341,7 +339,7 @@ export default function Home() {
             order: order.build(),
             extension: order.extension,
             signature,
-            btcRecipientPublicKey: btcRecipientPublicKey,
+            btcUserPublicKey: btcUserWallet!.publicKey,
           },
           (_, value) => (typeof value === "bigint" ? value.toString() : value)
         ),
@@ -555,8 +553,6 @@ export default function Home() {
                   demo easier.
                 </p>
               </div>
-
-              {/* To Section */}
               <div className="space-y-2">
                 <label className="block text-sm text-gray-300">To</label>
                 <div className="flex space-x-2">
@@ -588,24 +584,6 @@ export default function Home() {
                   * You will receive the same amount in {toChain.unit}.
                 </p>
               </div>
-              {config[toChain.chainId].type === "btc" && (
-                <div className="space-y-2">
-                  <label className="block text-sm text-gray-300">
-                    Recipient BTC Public Key
-                  </label>
-                  <input
-                    type="text"
-                    value={btcRecipientPublicKey}
-                    onChange={(e) => setBtcRecipientPublicKey(e.target.value)}
-                    placeholder="Bitcoin Testnet address (e.g., tb1...)"
-                    className="w-full px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-cyan-500"
-                  />
-                  <p className="text-xs text-blue-200 mt-1">
-                    * A dummy recipient is used as default to simplify the demo
-                  </p>
-                </div>
-              )}
-
               {/* Swap Button */}
               <button
                 className="w-full py-3 mt-4 bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-700 hover:to-cyan-600 text-white font-semibold rounded-md transition-all text-base cursor-pointer"

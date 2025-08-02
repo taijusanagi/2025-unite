@@ -12,7 +12,7 @@ export async function POST(req: Request) {
       order,
       extension,
       signature,
-      btcRecipientPublicKey,
+      btcUserPublicKey,
     } = await req.json();
 
     if (
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       !order ||
       !extension ||
       !signature ||
-      !btcRecipientPublicKey
+      !btcUserPublicKey
     ) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       order,
       extension,
       signature,
-      btcRecipientPublicKey,
+      btcUserPublicKey,
       status: "order_created",
     };
 

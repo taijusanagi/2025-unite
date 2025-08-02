@@ -34,7 +34,7 @@ export async function POST(
       dstEscrowAddress,
       srcImmutables,
       dstImmutables,
-      btcRecipientPublicKey,
+      btcUserPublicKey,
       secret,
     } = await req.json();
 
@@ -69,7 +69,7 @@ export async function POST(
     if (config[srcChainId].type === "btc") {
       console.log("Destination chain: BTC");
 
-      if (!btcRecipientPublicKey) {
+      if (!btcUserPublicKey) {
         return NextResponse.json(
           { error: "Missing required parameters" },
           { status: 400 }
@@ -91,7 +91,7 @@ export async function POST(
         hashLock.sha256,
         dstTimeLocks.privateWithdrawal,
         dstTimeLocks.privateCancellation,
-        btcRecipientPublicKey,
+        btcUserPublicKey,
         btcResolver.publicKey
       );
 
@@ -113,7 +113,7 @@ export async function POST(
       }
 
       const btcUserRecipientAddress = publicKeyToAddress(
-        btcRecipientPublicKey,
+        btcUserPublicKey,
         network
       );
 
@@ -123,7 +123,7 @@ export async function POST(
       });
 
       spendPsbt.signInput(0, {
-        publicKey: btcRecipientPublicKey,
+        publicKey: btcUserPublicKey,
         sign: (hash) => Buffer.from(btcUser.keyPair.sign(hash)),
       });
 
