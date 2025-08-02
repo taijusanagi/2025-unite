@@ -15,8 +15,10 @@ export function addressToEthAddressFormat(btcAddress: string): string {
     return `0x${data.toString('hex')}`
 }
 
-export function publicKeyToAddress(publicKey: Buffer, network: bitcoin.Network): string {
-    return bitcoin.payments.p2wpkh({pubkey: publicKey, network}).address!
+export function publicKeyToAddress(publicKey: Buffer | string, network: bitcoin.Network): string {
+    const pubkeyBuffer = typeof publicKey === 'string' ? Buffer.from(publicKey, 'hex') : publicKey
+
+    return bitcoin.payments.p2wpkh({pubkey: pubkeyBuffer, network}).address!
 }
 
 export function walletFromWIF(

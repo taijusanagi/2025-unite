@@ -12,6 +12,7 @@ export async function POST(req: Request) {
       order,
       extension,
       signature,
+      btcUserRecipientKey,
     } = await req.json();
 
     if (
@@ -21,7 +22,8 @@ export async function POST(req: Request) {
       !dstChainId ||
       !order ||
       !extension ||
-      !signature
+      !signature ||
+      !btcUserRecipientKey
     ) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
     }
@@ -33,6 +35,7 @@ export async function POST(req: Request) {
       order,
       extension,
       signature,
+      btcUserRecipientKey,
       status: "order_created",
     };
 

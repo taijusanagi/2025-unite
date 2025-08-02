@@ -24,7 +24,7 @@ import {
 import { patchedDomain, getOrderHashWithPatch } from "@sdk/evm/patch";
 import IWETHContract from "@sdk/evm/contracts/IWETH.json";
 
-import { addressToEthAddressFormat } from "@sdk/btc";
+import { addressToEthAddressFormat, publicKeyToAddress } from "@sdk/btc";
 
 import * as bitcoin from "bitcoinjs-lib";
 import ECPairFactory from "ecpair";
@@ -51,8 +51,8 @@ export default function Home() {
   const [fromChain, setFromChain] = useState(chains[1]);
   const [toChain, setToChain] = useState(chains[0]);
   const [amount] = useState(5000);
-  const [recipient, setRecipient] = useState(
-    "tb1qpswqvqftg892v2sfwq95faryl6rvztkuf2rpf0"
+  const [btcRecipientPublicKey, setBtcRecipientPublicKey] = useState(
+    "02ce09b3d6b374619431656279fb2506fe665404adc39afccb14ca3d8e3c3a0d78"
   );
 
   const evmsigner = useEthersSigner();
@@ -317,8 +317,13 @@ export default function Home() {
       let signature = "";
 
       if (config[dstChainId].type == "btc") {
-        // @ts-ignore
-        order.inner.inner.receiver = addressToEthAddressFormat(recipient);
+        // const recipientAddress = publicKeyToAddress(
+        //   btcRecipientPublicKey,
+        //   bitcoin.networks.testnet
+        // );
+        // // @ts-ignore
+        // order.inner.inner.receiver =
+        //   addressToEthAddressFormat(recipientAddress);
       }
 
       if (config[srcChainId].type == "btc") {
@@ -355,7 +360,7 @@ export default function Home() {
             order: order.build(),
             extension: order.extension,
             signature,
-            btcPublicKey: btcUserWallet?.publicKey.toString(),
+            btcUserRecipientKey: btcRecipientPublicKey,
           },
           (_, value) => (typeof value === "bigint" ? value.toString() : value)
         ),
@@ -606,16 +611,15 @@ export default function Home() {
                   * You will receive the same amount in {toChain.unit}.
                 </p>
               </div>
-
-              {config[toChain.chainId].type !== "evm" && (
+              {config[toChain.chainId].type === "btc" && (
                 <div className="space-y-2">
                   <label className="block text-sm text-gray-300">
-                    Recipient Address
+                    Recipient BTC Public Key
                   </label>
                   <input
                     type="text"
-                    value={recipient}
-                    onChange={(e) => setRecipient(e.target.value)}
+                    value={btcRecipientPublicKey}
+                    onChange={(e) => setBtcRecipientPublicKey(e.target.value)}
                     placeholder="Bitcoin Testnet address (e.g., tb1...)"
                     className="w-full px-3 py-2 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-cyan-500"
                   />
@@ -668,6 +672,7 @@ export default function Home() {
         isOpen={isBtcAccountModalOpen}
         onClose={() => setIsBtcAccountModalOpen(false)}
         address={btcUserWallet?.address || ""}
+        publicKey={btcUserWallet?.publicKey.toString("hex") || ""}
         onDisconnect={() => {
           localStorage.removeItem("btcPrivateKey");
           setBtcUserWallet(null);

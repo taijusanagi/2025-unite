@@ -11,8 +11,14 @@ import { Address } from "@1inch/cross-chain-sdk";
 
 import * as bitcoin from "bitcoinjs-lib";
 import { hexToUint8Array } from "@1inch/byte-utils";
+import {
+  addressToEthAddressFormat,
+  publicKeyToAddress,
+  walletFromWIF,
+} from "@sdk/btc";
 
-const privateKey = process.env.ETH_PRIVATE_KEY || "0x";
+const ethPrivateKey = process.env.ETH_PRIVATE_KEY || "0x";
+const btcPrivateKey = process.env.BTC_PRIVATE_KEY || "0x";
 
 export async function POST(
   _req: Request,
@@ -42,6 +48,7 @@ export async function POST(
       order: _order,
       extension,
       signature,
+      btcUserRecipientKey,
     } = await response.json();
     const order = Sdk.CrossChainOrder.fromDataAndExtension(_order, extension);
 
@@ -50,6 +57,7 @@ export async function POST(
       config[dstChainId].resolver!
     );
     const fillAmount = order.makingAmount;
+    const btcResolver = walletFromWIF(btcPrivateKey, bitcoin.networks.testnet);
 
     let srcImmutables: Sdk.Immutables;
     let complement: Sdk.DstImmutablesComplement;
@@ -77,7 +85,7 @@ export async function POST(
         config[srcChainId].rpc,
         srcChainId
       );
-      const srcResolverWallet = new Wallet(privateKey, srcProvider);
+      const srcResolverWallet = new Wallet(ethPrivateKey, srcProvider);
       const srcEscrowFactory = new EscrowFactory(
         srcResolverWallet.provider,
         config[srcChainId].escrowFactory!
@@ -130,6 +138,19 @@ export async function POST(
     if (config[dstChainId].type === "btc") {
       console.log("Destination chain: BTC");
 
+      const recipientAddress = publicKeyToAddress(
+        btcUserRecipientKey,
+        bitcoin.networks.testnet
+      );
+      const ethFormattedRecipientAddress =
+        addressToEthAddressFormat(recipientAddress);
+
+      if (order.receiver.toString() !== ethFormattedRecipientAddress) {
+        throw new Error(
+          `Mismatch: order.receiver ${order.receiver} does not match BTC destination address ${ethFormattedRecipientAddress}`
+        );
+      }
+
       const dstTimeLocks = dstImmutables.timeLocks.toDstTimeLocks();
       const htlcScript = bitcoin.script.compile([
         Buffer.from(hexToUint8Array(dstImmutables.hash())),
@@ -141,7 +162,7 @@ export async function POST(
         bitcoin.opcodes.OP_SHA256,
         hashLock.sha256,
         bitcoin.opcodes.OP_EQUALVERIFY,
-        btcUser.publicKey, // 👤 Maker can claim with secret
+        btcUserRecipientKey, // 👤 Maker can claim with secret
         bitcoin.opcodes.OP_CHECKSIG,
         bitcoin.opcodes.OP_ELSE,
         bitcoin.script.number.encode(Number(dstTimeLocks.privateCancellation)),
@@ -161,7 +182,7 @@ export async function POST(
         config[dstChainId].rpc,
         dstChainId
       );
-      const dstResolverWallet = new Wallet(privateKey, dstProvider);
+      const dstResolverWallet = new Wallet(ethPrivateKey, dstProvider);
       const dstEscrowFactory = new EscrowFactory(
         dstResolverWallet.provider,
         config[dstChainId].escrowFactory!
