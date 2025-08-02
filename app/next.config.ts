@@ -10,7 +10,11 @@ const nextConfig: NextConfig = {
       ...config.experiments,
       asyncWebAssembly: true,
     };
-
+    if (!isServer) {
+      config.resolve.fallback = {
+        fs: false,
+      };
+    }
     return config;
   },
 };
