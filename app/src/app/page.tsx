@@ -80,6 +80,8 @@ export default function Home() {
 
   const [statuses, setStatuses] = useState<Status[]>([]);
 
+  const [isSwapping, setIsSwapping] = useState(false);
+
   useEffect(() => {
     const savedKey = localStorage.getItem("btcPrivateKey");
     if (savedKey) {
@@ -807,7 +809,11 @@ export default function Home() {
                   onClick={() => setIsGattaiAccountModalOpen(true)}
                   className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-md hover:from-blue-600 hover:to-purple-700 cursor-pointer font-semibold flex items-center gap-2 transition-all"
                 >
-                  <img src="/icon.png" alt="Gattai" className="w-5 h-5" />
+                  <img
+                    src="/icon.png"
+                    alt="Gattai"
+                    className="rounded-full w-5 h-5"
+                  />
                   Gattai Wallet
                 </button>
               </div>
@@ -945,6 +951,43 @@ export default function Home() {
                   * Amount is fixed to {amount} {fromChain.unit} to keep the
                   demo easier.
                 </p>
+              </div>
+              {/* Swap Button with Icon */}
+              <div className="flex justify-center">
+                <button
+                  onClick={() => {
+                    if (isSwapping) {
+                      return;
+                    }
+                    // Trigger animation
+                    setIsSwapping(true);
+                    setTimeout(() => setIsSwapping(false), 500); // Reset after animation
+
+                    // Swap logic
+                    const temp = fromChain;
+                    setFromChain(toChain);
+                    setToChain(temp);
+                  }}
+                  className={`rounded-full p-3 bg-gradient-to-r from-blue-600 to-purple-500 text-white shadow-md transition-transform duration-500 ${
+                    isSwapping ? "animate-spin" : ""
+                  } cursor-pointer`}
+                  aria-label="Swap Chains"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 8h2a2 2 0 012 2v6m0 0l-4-4m4 4l-4 4M7 16H5a2 2 0 01-2-2V8m0 0l4 4m-4-4l4-4"
+                    />
+                  </svg>
+                </button>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm text-gray-300">To</label>

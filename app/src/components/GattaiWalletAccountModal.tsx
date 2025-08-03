@@ -44,11 +44,13 @@ const GattaiWalletAccountModal: React.FC<GattaiWalletAccountModalProps> = ({
 
         {/* Header */}
         <div className="text-center mb-6">
-          <img
-            src="/icon.png" // Gattai icon
-            alt="Gattai Wallet"
-            className="w-16 h-16 mx-auto mb-2"
-          />
+          <div className="w-20 h-20 mx-auto mb-3 rounded-full bg-gradient-to-br from-blue-600 to-purple-500 p-1 shadow-lg">
+            <img
+              src="/icon.png"
+              alt="Gattai Wallet"
+              className="rounded-full w-full h-full object-cover"
+            />
+          </div>
           <h2 className="text-xl font-bold text-blue-400">Gattai Wallet</h2>
           <p className="text-sm text-gray-400">Connected</p>
         </div>
