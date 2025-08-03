@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import * as secp256k1 from "@bitcoinerlab/secp256k1";
 import * as bitcoin from "bitcoinjs-lib";
 
-import { nativeTokenAddress } from "../../../chains/sdk/evm/constants";
+import { nativeTokenAddress } from "../../../../chains/sdk/evm/constants";
 import { requestSignature } from "@neardefi/shade-agent-js";
 
 const app = new Hono();
