@@ -42,9 +42,9 @@ const btcResolverPublicKey =
   process.env.NEXT_PUBLIC_BTC_RESOLVER_PUBLIC_KEY || "";
 
 export default function Home() {
-  const [showDex, setShowDex] = useState(true);
+  const [showDex, setShowDex] = useState(false);
   const { openConnectModal } = useConnectModal();
-  const coins = ["/coins/monad.png", "/coins/btc.png"];
+  const coins = ["/coins/btc.png", "/coins/monad.png", "coins/etherlink.png"];
   const chains = Object.entries(config).map(([chainId, cfg]) => ({
     chainId: Number(chainId),
     type: cfg.type,
@@ -54,8 +54,8 @@ export default function Home() {
     exproler: cfg.explorer,
   }));
 
-  const [fromChain, setFromChain] = useState(chains[1]);
-  const [toChain, setToChain] = useState(chains[0]);
+  const [fromChain, setFromChain] = useState(chains[0]);
+  const [toChain, setToChain] = useState(chains[3]);
   const [amount] = useState(5000);
 
   const evmSigner = useEthersSigner();
@@ -80,6 +80,8 @@ export default function Home() {
 
   const [statuses, setStatuses] = useState<Status[]>([]);
 
+  const [isSwapping, setIsSwapping] = useState(false);
+
   useEffect(() => {
     const savedKey = localStorage.getItem("btcPrivateKey");
     if (savedKey) {
@@ -94,6 +96,17 @@ export default function Home() {
       }
     }
   }, []);
+
+  useEffect(() => {
+    const evmConnected = !!evmSigner;
+    const btcConnected = !!btcUser;
+    const gattaiConnected = !!gattaiWalletConfig;
+
+    // Close ConnectModal if both EVM and BTC wallets are connected, or Gattai is connected
+    if ((evmConnected && btcConnected) || gattaiConnected) {
+      setIsConnectModalOpen(false);
+    }
+  }, [evmSigner, btcUser, gattaiWalletConfig]);
 
   const evmConnectWallet = () => {
     if (openConnectModal) {
@@ -159,12 +172,14 @@ export default function Home() {
     if (!btcResolverPublicKey) {
       console.warn("⚠️ btc resolver public key not defined.");
       alert("btc resolver public key not defined.");
+      setIsStatusModalOpen(false);
       return;
     }
 
     if (fromChain.chainId === toChain.chainId) {
       console.warn("⚠️ Source and destination networks are the same.");
       alert("The source and destination networks must be different.");
+      setIsStatusModalOpen(false);
       return;
     }
 
@@ -225,7 +240,9 @@ export default function Home() {
         btcUserPublicKey;
 
       if (gattaiWalletConfig) {
-        addStatus("Creating order via Gattai Wallet");
+        addStatus(
+          "Creating 1inch Fusion+ Order in Gattai Solver Built with NEAR's Shade Agent"
+        );
         const res = await fetch(
           `${gattaiAgentUrl}/api/create-order-by-intent`,
           {
@@ -264,6 +281,7 @@ export default function Home() {
           console.warn("⚠️ EVM signer not connected.");
           alert("Please connect your EVM wallet to place an order.");
           evmConnectWallet();
+          setIsStatusModalOpen(false);
           return;
         }
 
@@ -273,12 +291,14 @@ export default function Home() {
         ) {
           console.warn("⚠️ Wrong EVM chain selected.");
           alert("Please switch to the 'From' network in your wallet.");
+          setIsStatusModalOpen(false);
           return;
         }
 
         if (fromChain.type === "btc" && !btcUser) {
           console.warn("⚠️ BTC user not connected for source chain.");
           alert("Please connect your BTC wallet to place an order.");
+          setIsStatusModalOpen(false);
           btcConnectWallet();
           return;
         }
@@ -287,6 +307,7 @@ export default function Home() {
           console.warn("⚠️ BTC user not connected for destination chain.");
           alert("Please connect your BTC wallet when destination is BTC.");
           btcConnectWallet();
+          setIsStatusModalOpen(false);
           return;
         }
 
@@ -297,7 +318,7 @@ export default function Home() {
             evmSigner!
           );
 
-          addStatus("Checking token balance");
+          addStatus("Checking user's wrapped native token balance");
           const balance = await srcWrappedNativeTokenContract.balanceOf(
             evmSigner!.address
           );
@@ -305,7 +326,7 @@ export default function Home() {
           updateLastStatus("done");
 
           if (balance < amount) {
-            addStatus("Depositing native token");
+            addStatus("Depositing wrapped native token");
             const tx = await srcWrappedNativeTokenContract.deposit({
               value: amount,
             });
@@ -319,7 +340,7 @@ export default function Home() {
             ]);
           }
 
-          addStatus("Checking token allowance");
+          addStatus("Checking user's wrapped native token allowance");
           const allowance = await srcWrappedNativeTokenContract.allowance(
             evmSigner!.address,
             config[srcChainId].limitOrderProtocol
@@ -328,7 +349,9 @@ export default function Home() {
           updateLastStatus("done");
 
           if (allowance < UINT_256_MAX) {
-            addStatus("Approving token allowance");
+            addStatus(
+              "Approving user's wrapped native token allowance for LOP."
+            );
             const tx = await srcWrappedNativeTokenContract.approve(
               config[srcChainId].limitOrderProtocol,
               UINT_256_MAX
@@ -344,7 +367,7 @@ export default function Home() {
           }
         }
 
-        addStatus("Sign the order in your wallet");
+        addStatus("Waiting for the user's signature");
         secret = randomBytes(32);
         hashLock = {
           keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
@@ -579,7 +602,7 @@ export default function Home() {
       console.log("📨 Order submitted to relayer");
       updateLastStatus("done");
 
-      addStatus("Waiting for escrow creation");
+      addStatus("Waiting for escrow creation by resolver");
       while (true) {
         const statusRes = await fetch(
           `/api/relayer/orders/${orderHash}/status`
@@ -603,7 +626,7 @@ export default function Home() {
       }
 
       if (config[dstChainId].type === "btc") {
-        addStatus("Redeeming BTC HTLC");
+        addStatus("Redeeming BTC HTLC (BTC requires maker to sign it)");
         console.log("🔁 Starting BTC claim flow");
         const dstWithdrawParamsRes = await fetch(
           `/api/relayer/orders/${orderHash}/btc/dst-withdraw-params`
@@ -728,7 +751,7 @@ export default function Home() {
         ]);
       }
 
-      addStatus("Submitting secret");
+      addStatus("Submitting secret to relayer");
       const secretRes = await fetch(`/api/relayer/orders/${orderHash}/secret`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -737,7 +760,7 @@ export default function Home() {
       if (!secretRes.ok) throw new Error("Failed to share secret");
       updateLastStatus("done");
 
-      addStatus("Waiting for withdrawal to complete");
+      addStatus("Waiting for resolver's withdrawal to complete");
       while (true) {
         const statusRes = await fetch(
           `/api/relayer/orders/${orderHash}/status`
@@ -796,7 +819,6 @@ export default function Home() {
                   onClick={() => setIsGattaiAccountModalOpen(true)}
                   className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-md hover:from-blue-600 hover:to-purple-700 cursor-pointer font-semibold flex items-center gap-2 transition-all"
                 >
-                  <img src="/icon.png" alt="Gattai" className="w-5 h-5" />
                   Gattai Wallet
                 </button>
               </div>
@@ -852,6 +874,13 @@ export default function Home() {
                 <div className="relative z-10 flex flex-col items-center text-center">
                   {/* Main Image with title */}
                   <div className="relative inline-block mx-auto">
+                    {/* 1inch image above the flame */}
+                    <img
+                      src="/1inch.png"
+                      alt="1inch"
+                      className="absolute z-10 max-w-xs md:max-w-sm opacity-15"
+                    />
+
                     <img
                       src="/icon.png"
                       alt="GattaiSwap Character"
@@ -865,22 +894,24 @@ export default function Home() {
                       </h1>
                     </div>
 
-                    {/* Floating Coins */}
-                    <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center">
+                    {/* Floating Coins + Slogan */}
+                    <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center space-y-3">
                       <div className="flex flex-wrap justify-center gap-6">
                         {coins.map((src, i) => (
                           <img
                             key={i}
                             src={src}
                             alt={`coin-${i}`}
-                            className={`w-10 h-10 object-contain`}
+                            className="w-10 h-10 object-contain"
                           />
                         ))}
                       </div>
                     </div>
                   </div>
                 </div>
-
+                <div className="mt-4 text-sm md:text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-blue-400 to-cyan-300 tracking-wide">
+                  Fusion Unleashed, Chain Abstracted
+                </div>
                 <div className="mt-4 text-center">
                   <button
                     onClick={() => setShowDex(true)}
@@ -898,9 +929,11 @@ export default function Home() {
         {showDex && (
           <div className="flex-grow flex items-center justify-center px-4 py-10">
             <div className="w-full max-w-md bg-gradient-to-br from-gray-800 via-gray-900 to-black border border-blue-900 shadow-xl p-6 rounded-xl space-y-6">
-              <h2 className="text-lg font-semibold text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-                Swap with 1inch Fusion +
-              </h2>
+              <div className="flex items-center justify-center gap-2">
+                <h2 className="text-xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-indigo-500">
+                  Cross-Chain Swaps with 1inch Fusion+
+                </h2>
+              </div>
 
               {/* From Section */}
               <div className="space-y-2">
@@ -934,6 +967,43 @@ export default function Home() {
                   * Amount is fixed to {amount} {fromChain.unit} to keep the
                   demo easier.
                 </p>
+              </div>
+              {/* Swap Button with Icon */}
+              <div className="flex justify-center">
+                <button
+                  onClick={() => {
+                    if (isSwapping) {
+                      return;
+                    }
+                    // Trigger animation
+                    setIsSwapping(true);
+                    setTimeout(() => setIsSwapping(false), 500); // Reset after animation
+
+                    // Swap logic
+                    const temp = fromChain;
+                    setFromChain(toChain);
+                    setToChain(temp);
+                  }}
+                  className={`rounded-full p-3 bg-gradient-to-r from-blue-600 to-purple-500 text-white shadow-md transition-transform duration-500 ${
+                    isSwapping ? "animate-spin" : ""
+                  } cursor-pointer`}
+                  aria-label="Swap Chains"
+                >
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M17 8h2a2 2 0 012 2v6m0 0l-4-4m4 4l-4 4M7 16H5a2 2 0 01-2-2V8m0 0l4 4m-4-4l4-4"
+                    />
+                  </svg>
+                </button>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm text-gray-300">To</label>

@@ -139,7 +139,7 @@ const StatusModal: React.FC<StatusModalProps> = ({
                 )}
               </div>
               <div className="pb-6">
-                {status.text.length > 40 ? (
+                {status.text.length > 80 ? (
                   <pre className="text-gray-300 text-xs whitespace-pre-wrap bg-black/20 p-2 rounded-md border border-red-500/30 text-left overflow-x-auto">
                     {(() => {
                       try {
@@ -174,7 +174,7 @@ const StatusModal: React.FC<StatusModalProps> = ({
           <div className="mt-4 text-center border-t border-gray-700 pt-4">
             <button
               onClick={onClose}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold"
+              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-semibold cursor-pointer"
             >
               Done
             </button>
