@@ -18,11 +18,11 @@ import { createSrcHtlcScript } from "../../../chains/sdk/btc";
 import { UINT_40_MAX, UINT_256_MAX } from "@1inch/byte-utils";
 import { config } from "../../../chains/sdk/config";
 import { addressToEthAddressFormat } from "../../../chains/sdk/btc";
-import { Contract, Interface } from "ethers";
+import { Contract, Interface, JsonRpcProvider } from "ethers";
 import IWETHContract from "../../../chains/sdk/evm/contracts/IWETH.json";
 
 import { Btc } from "../utils/bitcoin";
-import { Evm } from "../utils/ethereum";
+import { createEvmInstance } from "../utils/ethereum";
 
 import { utils } from "chainsig.js";
 const { toRSV, uint8ArrayToHex } = utils.cryptography;
@@ -54,7 +54,10 @@ app.post("/", async (c) => {
     console.log("🔢 Source chain:", srcChainId);
     console.log("🔢 Destination chain:", dstChainId);
     console.log("🔢 Maker asset:", makerAsset);
+    console.log("🔢 Taker asset:", takerAsset);
     console.log("💸 Amount:", amount);
+
+    const srcEvm = createEvmInstance(srcChainId);
 
     // dummy for now
     const takingAmount = amount;
@@ -64,14 +67,14 @@ app.post("/", async (c) => {
     let makerAddressInBtcFormat: string;
     let btcUserPublicKey;
 
-    if (config[dstChainId]?.type === "evm") {
-      const { address } = await Evm.deriveAddressAndPublicKey(
+    if (config[srcChainId]?.type === "evm") {
+      const { address } = await srcEvm.deriveAddressAndPublicKey(
         contractId,
         "ethereum-1"
       );
       makerAddress = address;
       console.log("🧾 EVM maker address:", makerAddress);
-    } else if (config[dstChainId]?.type === "btc") {
+    } else if (config[srcChainId]?.type === "btc") {
       const { address, publicKey } = await Btc.deriveAddressAndPublicKey(
         contractId,
         "bitcoin-1"
@@ -95,31 +98,36 @@ app.post("/", async (c) => {
     // 2. Overrides (following frontend pattern)
     console.log("⚙️ Applying overrides based on chain types...");
 
+    console.log("config[srcChainId]", config[srcChainId]);
+    console.log("config[dstChainId]", config[dstChainId]);
+
     let escrowFacotryAddress = new Sdk.Address(nullAddress);
     if (config[dstChainId]?.type === "evm") {
       escrowFacotryAddress = new Sdk.Address(config[srcChainId].escrowFactory);
-      console.log("🏗️ Escrow factory:", escrowFacotryAddress.value);
+      console.log("🏗️ Escrow factory:", escrowFacotryAddress.val);
     }
 
     let resolverAddress = new Sdk.Address(nullAddress);
     if (config[dstChainId]?.type === "evm") {
       resolverAddress = new Sdk.Address(config[srcChainId].resolver!);
-      console.log("🧩 Resolver:", resolverAddress.value);
+      console.log("🧩 Resolver:", resolverAddress.val);
     }
 
     let receiver;
     if (config[dstChainId]?.type === "btc") {
       receiver = new Sdk.Address(addressToEthAddressFormat(makerAddress));
-      console.log("📥 BTC receiver (ETH format):", receiver.value);
+      console.log("📥 BTC receiver (ETH format):", receiver.val);
     }
 
     // 3. Deposit + approve logic for EVM
     if (config[dstChainId]?.type === "evm") {
+      const provider = new JsonRpcProvider(config[srcChainId].rpc);
       console.log("🔧 Performing EVM deposit & approve...");
 
       const contract = new Contract(
         config[srcChainId].wrappedNative!,
-        IWETHContract.abi
+        IWETHContract.abi,
+        provider
       );
 
       // Interface object for encoding
@@ -130,7 +138,7 @@ app.post("/", async (c) => {
       const balance = await contract.balanceOf(makerAddress);
       console.log("💰 Balance:", balance.toString());
 
-      if (balance.lt(amount)) {
+      if (balance < amount) {
         console.log("🔄 Balance too low, preparing deposit...");
 
         // Encode deposit function data
@@ -138,7 +146,7 @@ app.post("/", async (c) => {
 
         // Build and sign deposit tx
         const { transaction, hashesToSign } =
-          await Evm.prepareTransactionForSigning({
+          await srcEvm.prepareTransactionForSigning({
             from: makerAddress,
             to: config[srcChainId].wrappedNative!,
             value: amount,
@@ -150,13 +158,15 @@ app.post("/", async (c) => {
           payload: uint8ArrayToHex(hashesToSign[0]),
         });
 
-        const signedDepositTx = Evm.finalizeTransactionSigning({
+        const signedDepositTx = srcEvm.finalizeTransactionSigning({
           transaction,
           rsvSignatures: [toRSV(depositSig)],
         });
 
-        const depositHash = await Evm.broadcastTx(signedDepositTx);
+        const { hash: depositHash } = await srcEvm.broadcastTx(signedDepositTx);
         console.log("✅ Deposit TX broadcasted:", depositHash);
+        await provider.waitForTransaction(depositHash, 1); // waits for 1 confirmation
+        console.log("✅ Deposit TX confirmed:", depositHash);
       }
 
       // STEP 2: Query Allowance
@@ -167,7 +177,7 @@ app.post("/", async (c) => {
       );
       console.log("🔓 Allowance:", allowance.toString());
 
-      if (allowance.lt(UINT_256_MAX)) {
+      if (allowance < UINT_256_MAX) {
         console.log("🔄 Allowance too low, preparing approval...");
 
         // Encode approve function data
@@ -178,7 +188,7 @@ app.post("/", async (c) => {
 
         // Build and sign approval tx
         const { transaction, hashesToSign } =
-          await Evm.prepareTransactionForSigning({
+          await srcEvm.prepareTransactionForSigning({
             from: makerAddress,
             to: config[srcChainId].wrappedNative!,
             value: 0,
@@ -190,13 +200,15 @@ app.post("/", async (c) => {
           payload: uint8ArrayToHex(hashesToSign[0]),
         });
 
-        const signedApproveTx = Evm.finalizeTransactionSigning({
+        const signedApproveTx = srcEvm.finalizeTransactionSigning({
           transaction,
           rsvSignatures: [toRSV(approveSig)],
         });
 
-        const approveHash = await Evm.broadcastTx(signedApproveTx);
+        const { hash: approveHash } = await srcEvm.broadcastTx(signedApproveTx);
         console.log("✅ Approve TX broadcasted:", approveHash);
+        await provider.waitForTransaction(approveHash, 1);
+        console.log("✅ Approve TX confirmed:", approveHash);
       }
     }
 
@@ -280,7 +292,6 @@ app.post("/", async (c) => {
 
     // 5. Signature
     let signature = "";
-    let btcMeta: any = null;
 
     if (config[srcChainId].type === "btc") {
       console.log("✍️ Signing BTC order...");

@@ -134,12 +134,9 @@ export default function Home() {
 
       setGattaiWalletConfig({
         accountId: data.accountId,
-        balance: data.balance,
         evmAddress: data.evmAddress,
-        evmBalance: data.evmBalance,
         btcAddress: data.btcAddress,
         btcPublicKey: data.btcPublicKey,
-        btcBalance: data.btcBalance,
       });
       setGattaiAgentUrl(url);
       setIsGattaiConnectModalOpen(false);
@@ -230,6 +227,9 @@ export default function Home() {
       if (gattaiWalletConfig) {
         addStatus("Creating order via Gattai Wallet");
 
+        console.log("makerAsset", makerAsset);
+        console.log("makerAsset.value", makerAsset.value);
+
         const res = await fetch(
           `${gattaiAgentUrl}/api/create-order-by-intent`,
           {
@@ -238,8 +238,8 @@ export default function Home() {
             body: JSON.stringify({
               srcChainId,
               dstChainId,
-              makerAsset,
-              takerAsset,
+              makerAsset: makerAsset.val,
+              takerAsset: takerAsset.val,
               amount,
             }),
           }
