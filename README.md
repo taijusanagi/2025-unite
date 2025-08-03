@@ -2,6 +2,8 @@
 
 Fusion unleashed. Chains Abstracted.
 
+![](./app/public/screenshot-1.png)
+
 Gattai Swap is a cross-chain swap app built on 1inch Fusion+, enabling seamless swaps across Bitcoin, Monad, and Etherlink. It also integrates NEAR chain signatures via the Shade Agent Framework to execute 1inch cross-chain orders in a fully chain-abstracted manner.
 
 ## Description
@@ -62,7 +64,7 @@ I added support for BTC, Monad, and Etherlink. The swap functionality is bidirec
 
 I primarily used a cross-chain swap SDK and existing smart contracts, making our implementation easily integrable with the 1inch protocol in the future. We closely studied the whitepaper and aimed to align our flow with 1inch Fusion and the existing architecture.
 
-#### The Main implementations are follows.
+#### The Main implementations are followings.
 
 ##### Deploy Script
 
