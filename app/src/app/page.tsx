@@ -44,7 +44,7 @@ const btcResolverPublicKey =
 export default function Home() {
   const [showDex, setShowDex] = useState(true);
   const { openConnectModal } = useConnectModal();
-  const coins = ["/coins/monad.png", "/coins/btc.png"];
+  const coins = ["/coins/btc.png", "/coins/monad.png", "coins/etherlink.png"];
   const chains = Object.entries(config).map(([chainId, cfg]) => ({
     chainId: Number(chainId),
     type: cfg.type,
@@ -869,6 +869,13 @@ export default function Home() {
                 <div className="relative z-10 flex flex-col items-center text-center">
                   {/* Main Image with title */}
                   <div className="relative inline-block mx-auto">
+                    {/* 1inch image above the flame */}
+                    <img
+                      src="/1inch.png"
+                      alt="1inch"
+                      className="absolute top-[60px] left-1/2 transform -translate-x-1/2 w-12 h-12 z-20"
+                    />
+
                     <img
                       src="/icon.png"
                       alt="GattaiSwap Character"
