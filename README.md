@@ -56,6 +56,10 @@ GattaiSwap solves multi-wallet complexity through chain abstraction:
 
 When a user initiates a swap via GattaiSwap, it interacts with a chain signature contract on NEAR to derive a usable address and sign messages. The Shade Agent Framework is employed to generate and sign 1inch cross-chain orders from a Trusted Execution Environment (TEE). The shade agent uses the request_signature functionality to securely sign both BTC and ETH-based orders—without compromising custodial control.
 
+💻 3. Integration of EVM-Compatible Chains
+
+We also support Etherlink and Monad, with bidirectional swaps with BTC successfully tested.
+
 ## Partner Integration
 
 ### 1inch Fusion + Extension and Building Full Application
@@ -97,6 +101,14 @@ I integrated the 1inch Fusion+ Solver, built using NEAR’s Shade Agent Framewor
 The solver takes trade intents—including makerAsset, takerAsset, and amount—then the agent constructs a 1inch cross-chain order, signed using NEAR’s chain signature.
 
 I believe this architecture lays the foundation for true chain abstraction.
+
+To setup the environment for the demo, please follow this steps.
+
+https://github.com/taijusanagi/2025-unite/tree/main/chain-abstraction-shade-agent
+
+Then you can use http://localhost:8080 in connect Gattai Wallet section.
+
+![gattai](./app/public/gattai.png)
 
 ### Etherlink
 

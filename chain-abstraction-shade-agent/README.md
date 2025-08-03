@@ -96,7 +96,7 @@ The CLI on Linux may prompt you to enter your `sudo password`.
 npm run dev
 ```
 
-Your app will start on https://localhost:3000
+Your app will start on https://localhost:8080
 
 ---
 
