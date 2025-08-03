@@ -95,6 +95,17 @@ export default function Home() {
     }
   }, []);
 
+  useEffect(() => {
+    const evmConnected = !!evmSigner;
+    const btcConnected = !!btcUser;
+    const gattaiConnected = !!gattaiWalletConfig;
+
+    // Close ConnectModal if both EVM and BTC wallets are connected, or Gattai is connected
+    if ((evmConnected && btcConnected) || gattaiConnected) {
+      setIsConnectModalOpen(false);
+    }
+  }, [evmSigner, btcUser, gattaiWalletConfig]);
+
   const evmConnectWallet = () => {
     if (openConnectModal) {
       openConnectModal();
