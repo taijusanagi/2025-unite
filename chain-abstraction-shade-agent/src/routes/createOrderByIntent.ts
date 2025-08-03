@@ -32,7 +32,7 @@ const NETWORK = bitcoin.networks.testnet;
 
 const app = new Hono();
 
-app.post("/order", async (c) => {
+app.post("/", async (c) => {
   try {
     const {
       srcChainId,
@@ -344,7 +344,7 @@ app.post("/order", async (c) => {
 
     console.log("✅ Order constructed and signed successfully.");
     return c.json({
-      success: true,
+      secret: secret,
       hash,
       hashLock: {
         sha256: hashLock.sha256.toString("hex"),
