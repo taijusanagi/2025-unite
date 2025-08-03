@@ -15,7 +15,11 @@ import {
   getOrderHashWithPatch,
 } from "../../../chains/sdk/evm/patch";
 import { createSrcHtlcScript } from "../../../chains/sdk/btc";
-import { UINT_40_MAX, UINT_256_MAX } from "@1inch/byte-utils";
+import {
+  UINT_40_MAX,
+  UINT_256_MAX,
+  uint8ArrayToHex as uint8ArrayToHexForSecret,
+} from "@1inch/byte-utils";
 import { config } from "../../../chains/sdk/config";
 import { addressToEthAddressFormat } from "../../../chains/sdk/btc";
 import { Contract, Interface, JsonRpcProvider } from "ethers";
@@ -221,11 +225,14 @@ app.post("/", async (c) => {
     // 4. Create Order
     console.log("📦 Constructing order...");
     const secret = randomBytes(32);
+    console.log("secret", secret);
 
     const hashLock = {
-      keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
+      keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHexForSecret(secret)),
       sha256: bitcoin.crypto.sha256(secret),
     };
+
+    console.log("hashLock", hashLock);
 
     const order = Sdk.CrossChainOrder.new(
       escrowFacotryAddress,
