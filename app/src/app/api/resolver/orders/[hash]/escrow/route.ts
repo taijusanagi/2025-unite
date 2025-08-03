@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { JsonRpcProvider } from "ethers";
 import * as Sdk from "@1inch/cross-chain-sdk";
-import { config } from "@/lib/config";
+import { config } from "@sdk/config";
 import { Wallet } from "@sdk/evm/wallet";
 import { Resolver } from "@sdk/evm/resolver";
 import { EscrowFactory } from "@sdk/evm/escrow-factory";

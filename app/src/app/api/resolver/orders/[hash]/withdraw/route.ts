@@ -1,4 +1,4 @@
-import { config } from "@/lib/config";
+import { config } from "@sdk/config";
 import { Resolver } from "@sdk/evm//resolver";
 import { Wallet } from "@sdk/evm//wallet";
 import { JsonRpcProvider } from "ethers";
