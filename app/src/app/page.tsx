@@ -1,4 +1,3 @@
-// app/page.tsx
 "use client";
 import React, { useEffect, useState } from "react";
 import { FaGithub } from "react-icons/fa";
@@ -12,8 +11,10 @@ import { useAccount, useChainId } from "wagmi";
 import { config } from "@sdk/config";
 import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal";
-import BtcConnectModal from "@/components/BtcConnectModal"; // Import the new BTC modal
+import BtcConnectModal from "@/components/BtcConnectModal";
 import BtcAccountModal from "@/components/BtcAccountModal";
+import ConnectGattaiModal from "@/components/ConnectGattaiModal";
+import GattaiWalletAccountModal from "@/components/GattaiWalletAccountModal"; // Import the new modal
 
 import Sdk from "@sdk/evm/cross-chain-sdk-shims";
 import {
@@ -32,9 +33,7 @@ import {
 } from "@sdk/btc";
 
 import * as bitcoin from "bitcoinjs-lib";
-
 import { walletFromWIF, BtcWallet } from "@sdk/btc";
-import ConnectGattaiModal from "@/components/ConnectGattaiModal";
 
 const network = bitcoin.networks.testnet;
 
@@ -63,16 +62,17 @@ export default function Home() {
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
 
-  // State for BTC connection
   const [btcUser, setBtcUser] = useState<BtcWallet | null>(null);
 
-  // State for the modals
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isBtcConnectModalOpen, setIsBtcConnectModalOpen] = useState(false);
   const [isBtcAccountModalOpen, setIsBtcAccountModalOpen] = useState(false);
   const [isGattaiConnectModalOpen, setIsGattaiConnectModalOpen] =
     useState(false);
+  const [isGattaiAccountModalOpen, setIsGattaiAccountModalOpen] =
+    useState(false); // State for the new modal
+
   const [gattaiAgentUrl, setGattaiAgentUrl] = useState<string | null>(null);
   const [gattaiWalletConfig, setGattaiWalletConfig] = useState<any | null>(
     null
@@ -80,7 +80,6 @@ export default function Home() {
 
   const [statuses, setStatuses] = useState<Status[]>([]);
 
-  // Check for saved BTC private key on mount
   useEffect(() => {
     const savedKey = localStorage.getItem("btcPrivateKey");
     if (savedKey) {
@@ -96,28 +95,24 @@ export default function Home() {
     }
   }, []);
 
-  // Renamed from handleConnectEVM
   const evmConnectWallet = () => {
     if (openConnectModal) {
       openConnectModal();
     }
   };
 
-  // Handler for opening the BTC private key modal
   const btcConnectWallet = () => {
-    setIsBtcConnectModalOpen(true); // Open the specific BTC modal
+    setIsBtcConnectModalOpen(true);
   };
 
   const onConnectGattai = () => {
     setIsGattaiConnectModalOpen(true);
   };
 
-  // Handler for saving the BTC private key from the modal
   const handleBtcConnect = (privateKey: string) => {
     try {
       const network = bitcoin.networks.testnet;
       const wallet = walletFromWIF(privateKey, network);
-
       localStorage.setItem("btcPrivateKey", privateKey);
       setBtcUser(wallet);
       setIsBtcConnectModalOpen(false);
@@ -134,15 +129,10 @@ export default function Home() {
   const handleGattaiConnect = async (url: string) => {
     try {
       const response = await fetch(`${url}/api/account`);
-      console.log("response", response);
       if (!response.ok) throw new Error("Failed to fetch Gattai wallet config");
-
-      setGattaiAgentUrl(url);
-      setIsGattaiConnectModalOpen(false);
-
       const data = await response.json();
 
-      const parsedConfig = {
+      setGattaiWalletConfig({
         accountId: data.accountId,
         balance: data.balance,
         evmAddress: data.evmAddress,
@@ -150,13 +140,20 @@ export default function Home() {
         btcAddress: data.btcAddress,
         btcPublicKey: data.btcPublicKey,
         btcBalance: data.btcBalance,
-      };
-
-      setGattaiWalletConfig(parsedConfig);
+      });
+      setGattaiAgentUrl(url);
+      setIsGattaiConnectModalOpen(false);
     } catch (error) {
       console.error("Error connecting Gattai wallet:", error);
       alert("Failed to connect to Gattai Wallet. Please check the URL.");
     }
+  };
+
+  // Handler to disconnect from Gattai Wallet
+  const handleGattaiDisconnect = () => {
+    setGattaiWalletConfig(null);
+    setGattaiAgentUrl(null);
+    setIsGattaiAccountModalOpen(false);
   };
 
   const createOrder = async () => {
@@ -692,39 +689,55 @@ export default function Home() {
           >
             GattaiSwap
           </div>
+          {/* ====== MODIFIED WALLET DISPLAY LOGIC ====== */}
           <div className="flex items-center gap-4">
-            {/* Show EVM wallet if connected */}
-            {evmSigner && (
-              <ConnectButton
-                chainStatus="icon"
-                accountStatus="avatar"
-                showBalance={false}
-              />
-            )}
-
-            {/* Show BTC wallet if connected */}
-            {btcUser && (
+            {gattaiWalletConfig ? (
+              // If GattaiWallet is connected, show it INSTEAD of other wallets
               <div>
                 <button
-                  onClick={() => setIsBtcAccountModalOpen(true)}
-                  className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white hover:bg-gray-700 cursor-pointer font-mono"
+                  onClick={() => setIsGattaiAccountModalOpen(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-md hover:from-blue-600 hover:to-purple-700 cursor-pointer font-semibold flex items-center gap-2 transition-all"
                 >
-                  {btcUser.address.slice(0, 6)}...
-                  {btcUser.address.slice(-4)}
+                  <img src="/icon.png" alt="Gattai" className="w-5 h-5" />
+                  Gattai Wallet
                 </button>
               </div>
-            )}
+            ) : (
+              // Otherwise, show the individual EVM and BTC wallet statuses
+              <>
+                {evmSigner && (
+                  <ConnectButton
+                    chainStatus="icon"
+                    accountStatus="avatar"
+                    showBalance={false}
+                  />
+                )}
 
-            {/* Show a connect button if EITHER wallet is not connected */}
-            {(!evmSigner || !btcUser) && (
-              <button
-                onClick={() => setIsConnectModalOpen(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
-              >
-                Connect
-              </button>
+                {btcUser && (
+                  <div>
+                    <button
+                      onClick={() => setIsBtcAccountModalOpen(true)}
+                      className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white hover:bg-gray-700 cursor-pointer font-mono"
+                    >
+                      {btcUser.address.slice(0, 6)}...
+                      {btcUser.address.slice(-4)}
+                    </button>
+                  </div>
+                )}
+
+                {/* Show a general connect button if not fully connected */}
+                {(!evmSigner || !btcUser) && (
+                  <button
+                    onClick={() => setIsConnectModalOpen(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
+                  >
+                    Connect
+                  </button>
+                )}
+              </>
             )}
           </div>
+          {/* ====== END OF MODIFIED LOGIC ====== */}
         </div>
 
         {/* 2. Hero */}
@@ -910,6 +923,16 @@ export default function Home() {
           setIsBtcAccountModalOpen(false);
         }}
       />
+      {/* ====== RENDER THE NEW MODAL ====== */}
+      {gattaiWalletConfig && (
+        <GattaiWalletAccountModal
+          isOpen={isGattaiAccountModalOpen}
+          onClose={() => setIsGattaiAccountModalOpen(false)}
+          onDisconnect={handleGattaiDisconnect}
+          evmAddress={gattaiWalletConfig.evmAddress}
+          btcAddress={gattaiWalletConfig.btcAddress}
+        />
+      )}
       <StatusModal
         isOpen={isStatusModalOpen}
         onClose={() => setIsStatusModalOpen(false)}
