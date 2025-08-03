@@ -151,7 +151,10 @@ app.post("/", async (c) => {
             to: config[srcChainId].wrappedNative!,
             value: amount,
             data,
+            gas: 100000n,
           });
+
+        console.log("transaction", transaction);
 
         const depositSig = await requestSignature({
           path: "ethereum-1",
@@ -193,7 +196,10 @@ app.post("/", async (c) => {
             to: config[srcChainId].wrappedNative!,
             value: 0,
             data,
+            gas: 100000n,
           });
+
+        console.log("transaction", transaction);
 
         const approveSig = await requestSignature({
           path: "ethereum-1",

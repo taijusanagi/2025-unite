@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { agentAccountId, agent } from "@neardefi/shade-agent-js";
+import { agentAccountId } from "@neardefi/shade-agent-js";
 import { Btc } from "../utils/bitcoin";
 import { defaultChainEvm } from "../utils/ethereum";
 
