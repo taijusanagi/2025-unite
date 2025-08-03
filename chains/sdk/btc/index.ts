@@ -1,5 +1,5 @@
 import * as bitcoin from 'bitcoinjs-lib'
-import ecc from '@bitcoinerlab/secp256k1'
+const ecc = require('@bitcoinerlab/secp256k1')
 import {ECPairFactory, ECPairInterface} from 'ecpair'
 import axios, {AxiosInstance} from 'axios'
 import {hexToUint8Array} from '@1inch/byte-utils'

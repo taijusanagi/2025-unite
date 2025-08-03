@@ -19,6 +19,7 @@ import { createSrcHtlcScript } from "../../../chains/sdk/btc";
 import { UINT_40_MAX, UINT_256_MAX } from "@1inch/byte-utils";
 import { config } from "../../../chains/sdk/config";
 import { addressToEthAddressFormat } from "../../../chains/sdk/btc";
+import { Contract, Interface } from "ethers";
 import IWETHContract from "../../../chains/sdk/evm/contracts/IWETH.json";
 
 import { Btc } from "../utils/bitcoin";
@@ -61,6 +62,7 @@ app.post("/order", async (c) => {
     // 1. Derive sender address
     let makerAddress: string;
     let makerAddressInBtcFormat: string;
+    let btcUserPublicKey;
 
     if (config[dstChainId]?.type === "evm") {
       const { address } = await Evm.deriveAddressAndPublicKey(
@@ -70,7 +72,7 @@ app.post("/order", async (c) => {
       makerAddress = address;
       console.log("🧾 EVM maker address:", makerAddress);
     } else if (config[dstChainId]?.type === "btc") {
-      const { address } = await Btc.deriveAddressAndPublicKey(
+      const { address, publicKey } = await Btc.deriveAddressAndPublicKey(
         contractId,
         "bitcoin-1"
       );
@@ -78,6 +80,7 @@ app.post("/order", async (c) => {
       makerAddress = new Sdk.Address(
         addressToEthAddressFormat(makerAddressInBtcFormat)
       );
+      btcUserPublicKey = publicKey.toString("hex");
       console.log(
         "🧾 BTC maker address in BTC format:",
         makerAddressInBtcFormat
@@ -120,48 +123,87 @@ app.post("/order", async (c) => {
     if (config[dstChainId]?.type === "evm") {
       console.log("🔧 Performing EVM deposit & approve...");
 
-      const { transaction: depositTx, hashesToSign: depositHashes } =
-        await Evm.buildDepositTx(
-          config[srcChainId].wrappedNative!,
-          IWETHContract.abi,
-          "deposit",
-          [],
-          amount
-        );
+      const contract = new Contract(
+        config[srcChainId].wrappedNative!,
+        IWETHContract.abi
+      );
 
-      const depositSig = await requestSignature({
-        path: "ethereum-1",
-        payload: depositHashes[0].toString("hex"),
-      });
+      // Interface object for encoding
+      const iface = new Interface(IWETHContract.abi);
 
-      const depositFinal = Evm.finalizeTransactionSigning({
-        transaction: depositTx,
-        rsvSignatures: [toRSV(depositSig)],
-      });
+      // STEP 1: Query Balance
+      console.log("🧮 Checking token balance...");
+      const balance = await contract.balanceOf(makerAddress);
+      console.log("💰 Balance:", balance.toString());
 
-      const depositHash = await Evm.broadcastTx(depositFinal);
-      console.log("✅ Deposit broadcasted:", depositHash);
+      if (balance.lt(amount)) {
+        console.log("🔄 Balance too low, preparing deposit...");
 
-      const { transaction: approveTx, hashesToSign: approveHashes } =
-        await Evm.buildApproveTx(
-          config[srcChainId].wrappedNative!,
-          IWETHContract.abi,
-          "approve",
-          [config[srcChainId].limitOrderProtocol, UINT_256_MAX]
-        );
+        // Encode deposit function data
+        const data = iface.encodeFunctionData("deposit");
 
-      const approveSig = await requestSignature({
-        path: "ethereum-1",
-        payload: approveHashes[0].toString("hex"),
-      });
+        // Build and sign deposit tx
+        const { transaction, hashesToSign } =
+          await Evm.prepareTransactionForSigning({
+            from: makerAddress,
+            to: config[srcChainId].wrappedNative!,
+            value: amount,
+            data,
+          });
 
-      const approveFinal = Evm.finalizeTransactionSigning({
-        transaction: approveTx,
-        rsvSignatures: [toRSV(approveSig)],
-      });
+        const depositSig = await requestSignature({
+          path: "ethereum-1",
+          payload: uint8ArrayToHex(hashesToSign[0]),
+        });
 
-      const approveHash = await Evm.broadcastTx(approveFinal);
-      console.log("✅ Approve broadcasted:", approveHash);
+        const signedDepositTx = Evm.finalizeTransactionSigning({
+          transaction,
+          rsvSignatures: [toRSV(depositSig)],
+        });
+
+        const depositHash = await Evm.broadcastTx(signedDepositTx);
+        console.log("✅ Deposit TX broadcasted:", depositHash);
+      }
+
+      // STEP 2: Query Allowance
+      console.log("🔍 Checking token allowance...");
+      const allowance = await contract.allowance(
+        makerAddress,
+        config[srcChainId].limitOrderProtocol
+      );
+      console.log("🔓 Allowance:", allowance.toString());
+
+      if (allowance.lt(UINT_256_MAX)) {
+        console.log("🔄 Allowance too low, preparing approval...");
+
+        // Encode approve function data
+        const data = iface.encodeFunctionData("approve", [
+          config[srcChainId].limitOrderProtocol,
+          UINT_256_MAX,
+        ]);
+
+        // Build and sign approval tx
+        const { transaction, hashesToSign } =
+          await Evm.prepareTransactionForSigning({
+            from: makerAddress,
+            to: config[srcChainId].wrappedNative!,
+            value: 0,
+            data,
+          });
+
+        const approveSig = await requestSignature({
+          path: "ethereum-1",
+          payload: uint8ArrayToHex(hashesToSign[0]),
+        });
+
+        const signedApproveTx = Evm.finalizeTransactionSigning({
+          transaction,
+          rsvSignatures: [toRSV(approveSig)],
+        });
+
+        const approveHash = await Evm.broadcastTx(signedApproveTx);
+        console.log("✅ Approve TX broadcasted:", approveHash);
+      }
     }
 
     // 4. Create Order
@@ -180,7 +222,7 @@ app.post("/order", async (c) => {
         maker: new Sdk.Address(makerAddress),
         makingAmount: BigInt(amount),
         takingAmount: BigInt(takingAmount),
-        makerAsset,
+        makerAsset: new Sdk.Address(makerAsset),
         takerAsset,
         receiver,
       },
