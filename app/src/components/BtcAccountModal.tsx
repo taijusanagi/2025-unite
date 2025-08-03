@@ -5,7 +5,6 @@ interface BtcAccountModalProps {
   isOpen: boolean;
   onClose: () => void;
   address: string;
-  publicKey: string;
   onDisconnect: () => void;
 }
 
@@ -13,7 +12,6 @@ const BtcAccountModal: React.FC<BtcAccountModalProps> = ({
   isOpen,
   onClose,
   address,
-  publicKey,
   onDisconnect,
 }) => {
   if (!isOpen) return null;
@@ -24,7 +22,7 @@ const BtcAccountModal: React.FC<BtcAccountModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="bg-white text-black w-80 rounded-xl p-5 shadow-2xl relative cursor-default"
+        className="bg-white text-black w-80 rounded-2xl p-5 shadow-2xl relative cursor-default"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
@@ -35,8 +33,8 @@ const BtcAccountModal: React.FC<BtcAccountModalProps> = ({
           &times;
         </button>
 
-        {/* Icon & Address */}
-        <div className="text-center mb-4">
+        {/* Icon */}
+        <div className="text-center mb-3">
           <img
             src="/coins/btc.png"
             alt="BTC"
@@ -44,28 +42,25 @@ const BtcAccountModal: React.FC<BtcAccountModalProps> = ({
           />
         </div>
 
-        {/* Full Address */}
-        <div className="text-sm font-mono text-center break-all mb-4">
-          {address}
+        {/* Truncated Address */}
+        <div className="text-center font-semibold text-lg mb-1">
+          {address.slice(0, 4)}...{address.slice(-4)}
         </div>
 
-        {/* Buttons */}
-        <div className="flex flex-col gap-2">
+        {/* Balance (Optional hardcoded for now) */}
+        <div className="text-center text-sm text-gray-600 mb-4">0.0001 BTC</div>
+
+        {/* Buttons: Copy & Disconnect */}
+        <div className="flex justify-between items-center gap-2">
           <button
             onClick={() => navigator.clipboard.writeText(address)}
-            className="w-full py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium cursor-pointer"
+            className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium cursor-pointer"
           >
             Copy Address
           </button>
           <button
-            onClick={() => navigator.clipboard.writeText(publicKey)}
-            className="w-full py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium cursor-pointer"
-          >
-            Copy Public Key
-          </button>
-          <button
             onClick={onDisconnect}
-            className="w-full py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-medium cursor-pointer"
+            className="flex-1 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium cursor-pointer"
           >
             Disconnect
           </button>

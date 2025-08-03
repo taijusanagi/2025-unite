@@ -54,8 +54,8 @@ export default function Home() {
     exproler: cfg.explorer,
   }));
 
-  const [fromChain, setFromChain] = useState(chains[1]);
-  const [toChain, setToChain] = useState(chains[0]);
+  const [fromChain, setFromChain] = useState(chains[0]);
+  const [toChain, setToChain] = useState(chains[3]);
   const [amount] = useState(5000);
 
   const evmSigner = useEthersSigner();
@@ -172,12 +172,14 @@ export default function Home() {
     if (!btcResolverPublicKey) {
       console.warn("⚠️ btc resolver public key not defined.");
       alert("btc resolver public key not defined.");
+      setIsStatusModalOpen(false);
       return;
     }
 
     if (fromChain.chainId === toChain.chainId) {
       console.warn("⚠️ Source and destination networks are the same.");
       alert("The source and destination networks must be different.");
+      setIsStatusModalOpen(false);
       return;
     }
 
@@ -277,6 +279,7 @@ export default function Home() {
           console.warn("⚠️ EVM signer not connected.");
           alert("Please connect your EVM wallet to place an order.");
           evmConnectWallet();
+          setIsStatusModalOpen(false);
           return;
         }
 
@@ -286,12 +289,14 @@ export default function Home() {
         ) {
           console.warn("⚠️ Wrong EVM chain selected.");
           alert("Please switch to the 'From' network in your wallet.");
+          setIsStatusModalOpen(false);
           return;
         }
 
         if (fromChain.type === "btc" && !btcUser) {
           console.warn("⚠️ BTC user not connected for source chain.");
           alert("Please connect your BTC wallet to place an order.");
+          setIsStatusModalOpen(false);
           btcConnectWallet();
           return;
         }
@@ -300,6 +305,7 @@ export default function Home() {
           console.warn("⚠️ BTC user not connected for destination chain.");
           alert("Please connect your BTC wallet when destination is BTC.");
           btcConnectWallet();
+          setIsStatusModalOpen(false);
           return;
         }
 
@@ -809,11 +815,6 @@ export default function Home() {
                   onClick={() => setIsGattaiAccountModalOpen(true)}
                   className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-md hover:from-blue-600 hover:to-purple-700 cursor-pointer font-semibold flex items-center gap-2 transition-all"
                 >
-                  <img
-                    src="/icon.png"
-                    alt="Gattai"
-                    className="rounded-full w-5 h-5"
-                  />
                   Gattai Wallet
                 </button>
               </div>
@@ -873,7 +874,7 @@ export default function Home() {
                     <img
                       src="/1inch.png"
                       alt="1inch"
-                      className="absolute top-[60px] left-1/2 transform -translate-x-1/2 w-12 h-12 z-20"
+                      className="absolute z-10 max-w-xs md:max-w-sm opacity-15"
                     />
 
                     <img
@@ -889,22 +890,24 @@ export default function Home() {
                       </h1>
                     </div>
 
-                    {/* Floating Coins */}
-                    <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center">
+                    {/* Floating Coins + Slogan */}
+                    <div className="absolute bottom-0 left-0 right-0 flex flex-col items-center text-center space-y-3">
                       <div className="flex flex-wrap justify-center gap-6">
                         {coins.map((src, i) => (
                           <img
                             key={i}
                             src={src}
                             alt={`coin-${i}`}
-                            className={`w-10 h-10 object-contain`}
+                            className="w-10 h-10 object-contain"
                           />
                         ))}
                       </div>
                     </div>
                   </div>
                 </div>
-
+                <div className="mt-4 text-sm md:text-lg font-semibold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 via-blue-400 to-cyan-300 tracking-wide">
+                  Fusion Unleashed, Chain Abstracted
+                </div>
                 <div className="mt-4 text-center">
                   <button
                     onClick={() => setShowDex(true)}
@@ -922,9 +925,11 @@ export default function Home() {
         {showDex && (
           <div className="flex-grow flex items-center justify-center px-4 py-10">
             <div className="w-full max-w-md bg-gradient-to-br from-gray-800 via-gray-900 to-black border border-blue-900 shadow-xl p-6 rounded-xl space-y-6">
-              <h2 className="text-lg font-semibold text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-                Swap with 1inch Fusion +
-              </h2>
+              <div className="flex items-center justify-center gap-2">
+                <h2 className="text-xl font-bold text-center text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-cyan-400 to-indigo-500">
+                  Cross-Chain Swaps with 1inch Fusion+
+                </h2>
+              </div>
 
               {/* From Section */}
               <div className="space-y-2">
