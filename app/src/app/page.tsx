@@ -1084,6 +1084,7 @@ export default function Home() {
         isOpen={isBtcAccountModalOpen}
         onClose={() => setIsBtcAccountModalOpen(false)}
         address={btcUser?.address || ""}
+        // @ts-ignore
         publicKey={btcUser?.publicKey.toString("hex") || ""}
         onDisconnect={() => {
           localStorage.removeItem("btcPrivateKey");
