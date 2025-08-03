@@ -22,7 +22,7 @@ import {
 } from "@1inch/byte-utils";
 import { config } from "../../../chains/sdk/config";
 import { addressToEthAddressFormat } from "../../../chains/sdk/btc";
-import { Contract, Interface, JsonRpcProvider } from "ethers";
+import { Contract, Interface, JsonRpcProvider, getAddress } from "ethers";
 import IWETHContract from "../../../chains/sdk/evm/contracts/IWETH.json";
 
 import { Btc } from "../utils/bitcoin";
@@ -63,36 +63,33 @@ app.post("/", async (c) => {
 
     const srcEvm = createEvmInstance(srcChainId);
 
+    const { address: evmRawAddress } = await srcEvm.deriveAddressAndPublicKey(
+      contractId,
+      "ethereum-1"
+    );
+    const evmAddress = getAddress(evmRawAddress); // checksummed
+
+    const { address: btcAddress, publicKey: btcPubKeyBuf } =
+      await Btc.deriveAddressAndPublicKey(contractId, "bitcoin-1");
+
+    const btcAddressInEthFormat = addressToEthAddressFormat(btcAddress);
+    const btcUserPublicKey = btcPubKeyBuf.toString("hex");
+
+    // 🧾 Logs
+    console.log("🧾 EVM address:", evmAddress);
+    console.log("🧾 BTC address:", btcAddress);
+    console.log("🧾 BTC as EVM address:", btcAddressInEthFormat);
+
     // dummy for now
     const takingAmount = amount;
 
     // 1. Derive sender address
     let makerAddress: string;
-    let makerAddressInBtcFormat: string;
-    let btcUserPublicKey = "";
 
     if (config[srcChainId]?.type === "evm") {
-      const { address } = await srcEvm.deriveAddressAndPublicKey(
-        contractId,
-        "ethereum-1"
-      );
-      makerAddress = address;
-      console.log("🧾 EVM maker address:", makerAddress);
+      makerAddress = evmAddress;
     } else if (config[srcChainId]?.type === "btc") {
-      const { address, publicKey } = await Btc.deriveAddressAndPublicKey(
-        contractId,
-        "bitcoin-1"
-      );
-      makerAddressInBtcFormat = address;
-      makerAddress = new Sdk.Address(
-        addressToEthAddressFormat(makerAddressInBtcFormat)
-      );
-      btcUserPublicKey = publicKey.toString("hex");
-      console.log(
-        "🧾 BTC maker address in BTC format:",
-        makerAddressInBtcFormat
-      );
-      console.log("🧾 BTC maker address in ETH Format:", makerAddress);
+      makerAddress = btcAddressInEthFormat;
     } else {
       throw new Error("❌ Unsupported chain type");
     }
@@ -119,7 +116,7 @@ app.post("/", async (c) => {
 
     let receiver;
     if (config[dstChainId]?.type === "btc") {
-      receiver = new Sdk.Address(addressToEthAddressFormat(makerAddress));
+      receiver = new Sdk.Address(btcAddressInEthFormat);
       console.log("📥 BTC receiver (ETH format):", receiver.val);
     }
 

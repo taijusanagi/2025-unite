@@ -249,7 +249,7 @@ export default function Home() {
 
         console.log("response from gattai wallet: ", data);
 
-        secret = Buffer.from(data.secret);
+        secret = Buffer.from(data.secret, "hex");
         hashLock = data.hashLock;
         order = data.order;
         orderHash = data.hash;
