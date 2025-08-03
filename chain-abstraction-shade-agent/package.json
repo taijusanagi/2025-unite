@@ -14,12 +14,14 @@
     "phala:deploy": "phala cvms create --name my-app --vcpu 1 --compose ./docker-compose.yaml --env-file ./.env.development.local"
   },
   "dependencies": {
+    "@bitcoinerlab/secp256k1": "^1.2.0",
     "@hono/node-server": "^1.15.0",
     "@neardefi/shade-agent-js": "^1.0.0",
+    "bitcoinjs-lib": "^6.1.7",
     "chainsig.js": "^1.1.9",
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
-    "ethers": "^6.11.1",
+    "ethers": "^6.13.2",
     "hono": "^4.8.4"
   },
   "devDependencies": {

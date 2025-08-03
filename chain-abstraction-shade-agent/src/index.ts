@@ -13,6 +13,7 @@ import agentAccount from "./routes/agentAccount";
 import btcAccount from "./routes/btcAccount";
 import ethAccount from "./routes/ethAccount";
 import createOrderByIntent from "./routes/createOrderByIntent";
+// import testSignatureAndRecoverAndLoadSdk from "./routes/testSignatureAndRecoverAndLoadSdk";
 
 const app = new Hono();
 
@@ -28,6 +29,7 @@ app.route("/api/btc-account", btcAccount);
 app.route("/api/eth-account", ethAccount);
 
 app.route("/api/create-order-by-intent", createOrderByIntent);
+// app.route("/api/test-signature-and-recover-and-load-sdk", testSignatureAndRecoverAndLoadSdk);
 
 // Start the server
 const port = Number(process.env.PORT || "8080");
