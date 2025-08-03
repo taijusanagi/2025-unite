@@ -11,6 +11,7 @@ if (process.env.NODE_ENV !== "production") {
 // Import routes
 import account from "./routes/account";
 import createOrderByIntent from "./routes/createOrderByIntent";
+import claimBtc from "./routes/claimBtc";
 // import testSignatureAndRecoverAndLoadSdk from "./routes/testSignatureAndRecoverAndLoadSdk";
 
 const app = new Hono();
@@ -24,6 +25,7 @@ app.get("/", (c) => c.json({ message: "App is running" }));
 // Routes
 app.route("/api/account", account);
 app.route("/api/create-order-by-intent", createOrderByIntent);
+app.route("/api/claim-btc", claimBtc);
 // app.route("/api/test-signature-and-recover-and-load-sdk", testSignatureAndRecoverAndLoadSdk);
 
 // Start the server

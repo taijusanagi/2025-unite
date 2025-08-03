@@ -614,76 +614,106 @@ export default function Home() {
         const dstWithdrawParamsJson = await dstWithdrawParamsRes.json();
         console.log("📬 BTC withdraw params:", dstWithdrawParamsJson);
 
-        const rawTxHex = await btcProvider.getRawTransactionHex(
-          dstWithdrawParamsJson.dstEscrowAddress
-        );
+        let finalTxId;
 
-        const spendPsbt = new bitcoin.Psbt({ network });
-        console.log(
-          "dstWithdrawParamsJson.htlcScript",
-          dstWithdrawParamsJson.htlcScript
-        );
-        const htlcScript = Buffer.from(dstWithdrawParamsJson.htlcScript, "hex");
-
-        await btcProvider.verifyHTLCScriptHashFromTx(
-          dstWithdrawParamsJson.dstEscrowAddress,
-          htlcScript
-        );
-
-        // this should work after waiting Median Confirmation Time
-        // const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
-        //   BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
-        // ).toDstTimeLocks();
-        // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
-        spendPsbt.addInput({
-          hash: dstWithdrawParamsJson.dstEscrowAddress,
-          index: 0,
-          nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
-          redeemScript: htlcScript,
-          sequence: 0xfffffffe,
-        });
-
-        const redeemFee = 1000;
-        const redeemValue =
-          dstWithdrawParamsJson.dstImmutables.amount - redeemFee;
-        if (redeemValue <= 0) {
-          console.error("❌ Not enough value to redeem HTLC.");
-          return;
-        }
-
-        spendPsbt.addOutput({
-          address: btcUser!.address,
-          value: redeemValue,
-        });
-
-        spendPsbt.signInput(0, {
-          publicKey: btcUser!.publicKey,
-          sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
-        });
-
-        spendPsbt.finalizeInput(0, (_: number, input: any) => {
-          const signature = input.partialSig[0].signature;
-          const unlockingScript = bitcoin.script.compile([
-            signature,
-            secret,
-            bitcoin.opcodes.OP_TRUE,
-          ]);
-
-          const payment = bitcoin.payments.p2sh({
-            redeem: {
-              input: unlockingScript,
-              output: htlcScript,
-            },
+        // 2. Decide HOW to claim: via agent or locally.
+        if (gattaiWalletConfig) {
+          // Agent Flow: Call the backend to sign and broadcast.
+          console.log("...via Gattai Wallet Agent");
+          const claimRes = await fetch(`${gattaiAgentUrl}/api/claim-btc`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              secret: secret.toString("hex"),
+              dstEscrowAddress: dstWithdrawParamsJson.dstEscrowAddress,
+              htlcScriptHex: dstWithdrawParamsJson.htlcScript,
+              amount: dstWithdrawParamsJson.dstImmutables.amount,
+            }),
           });
 
-          return {
-            finalScriptSig: payment.input,
-            finalScriptWitness: undefined,
-          };
-        });
+          if (!claimRes.ok) {
+            const errorData = await claimRes.json();
+            throw new Error(
+              `Failed to claim BTC via Agent: ${errorData.message}`
+            );
+          }
+          const { txId } = await claimRes.json();
+          finalTxId = txId;
+        } else {
+          const rawTxHex = await btcProvider.getRawTransactionHex(
+            dstWithdrawParamsJson.dstEscrowAddress
+          );
 
-        const finalTxHex = spendPsbt.extractTransaction().toHex();
-        const finalTxId = await btcProvider.broadcastTx(finalTxHex);
+          const spendPsbt = new bitcoin.Psbt({ network });
+          console.log(
+            "dstWithdrawParamsJson.htlcScript",
+            dstWithdrawParamsJson.htlcScript
+          );
+          const htlcScript = Buffer.from(
+            dstWithdrawParamsJson.htlcScript,
+            "hex"
+          );
+
+          await btcProvider.verifyHTLCScriptHashFromTx(
+            dstWithdrawParamsJson.dstEscrowAddress,
+            htlcScript
+          );
+
+          // this should work after waiting Median Confirmation Time
+          // const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
+          //   BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
+          // ).toDstTimeLocks();
+          // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
+          spendPsbt.addInput({
+            hash: dstWithdrawParamsJson.dstEscrowAddress,
+            index: 0,
+            nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+            redeemScript: htlcScript,
+            sequence: 0xfffffffe,
+          });
+
+          const redeemFee = 1000;
+          const redeemValue =
+            dstWithdrawParamsJson.dstImmutables.amount - redeemFee;
+          if (redeemValue <= 0) {
+            console.error("❌ Not enough value to redeem HTLC.");
+            return;
+          }
+
+          spendPsbt.addOutput({
+            address: btcUser!.address,
+            value: redeemValue,
+          });
+
+          spendPsbt.signInput(0, {
+            publicKey: btcUser!.publicKey,
+            sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
+          });
+
+          spendPsbt.finalizeInput(0, (_: number, input: any) => {
+            const signature = input.partialSig[0].signature;
+            const unlockingScript = bitcoin.script.compile([
+              signature,
+              secret,
+              bitcoin.opcodes.OP_TRUE,
+            ]);
+
+            const payment = bitcoin.payments.p2sh({
+              redeem: {
+                input: unlockingScript,
+                output: htlcScript,
+              },
+            });
+
+            return {
+              finalScriptSig: payment.input,
+              finalScriptWitness: undefined,
+            };
+          });
+
+          const finalTxHex = spendPsbt.extractTransaction().toHex();
+          finalTxId = await btcProvider.broadcastTx(finalTxHex);
+        }
 
         console.log("🎉 Maker successfully claimed BTC from HTLC!");
         console.log("✅ Redemption TXID:", finalTxId);
