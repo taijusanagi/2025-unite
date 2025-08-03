@@ -884,7 +884,7 @@ export default function Home() {
                     <img
                       src="/icon.png"
                       alt="GattaiSwap Character"
-                      className="max-w-xs md:max-w-sm rounded-xl"
+                      className="max-w-xs md:max-w-sm rounded-full"
                     />
 
                     {/* Title over image */}
