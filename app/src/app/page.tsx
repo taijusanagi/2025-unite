@@ -74,6 +74,10 @@ export default function Home() {
   const [isGattaiConnectModalOpen, setIsGattaiConnectModalOpen] =
     useState(false);
   const [gattaiAgentUrl, setGattaiAgentUrl] = useState<string | null>(null);
+  const [gattaiWalletConfig, setGattaiWalletConfig] = useState<any | null>(
+    null
+  );
+
   const [statuses, setStatuses] = useState<Status[]>([]);
 
   // Check for saved BTC private key on mount
@@ -127,9 +131,32 @@ export default function Home() {
     }
   };
 
-  const handleGattaiConnect = (url: string) => {
-    setGattaiAgentUrl(url);
-    setIsGattaiConnectModalOpen(false);
+  const handleGattaiConnect = async (url: string) => {
+    try {
+      const response = await fetch(`${url}/api/account`);
+      console.log("response", response);
+      if (!response.ok) throw new Error("Failed to fetch Gattai wallet config");
+
+      setGattaiAgentUrl(url);
+      setIsGattaiConnectModalOpen(false);
+
+      const data = await response.json();
+
+      const parsedConfig = {
+        accountId: data.accountId,
+        balance: data.balance,
+        evmAddress: data.evmAddress,
+        evmBalance: data.evmBalance,
+        btcAddress: data.btcAddress,
+        btcPublicKey: data.btcPublicKey,
+        btcBalance: data.btcBalance,
+      };
+
+      setGattaiWalletConfig(parsedConfig);
+    } catch (error) {
+      console.error("Error connecting Gattai wallet:", error);
+      alert("Failed to connect to Gattai Wallet. Please check the URL.");
+    }
   };
 
   const createOrder = async () => {

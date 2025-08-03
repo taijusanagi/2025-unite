@@ -12,7 +12,7 @@ const ConnectGattaiModal: React.FC<ConnectGattaiModalProps> = ({
   onClose,
   onConnect,
 }) => {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState("http://localhost:8080");
 
   if (!isOpen) return null;
 
