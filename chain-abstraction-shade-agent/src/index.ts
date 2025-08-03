@@ -11,7 +11,6 @@ if (process.env.NODE_ENV !== "production") {
 // Import routes
 import ethAccount from "./routes/ethAccount";
 import agentAccount from "./routes/agentAccount";
-import transaction from "./routes/transaction";
 
 const app = new Hono();
 
@@ -24,7 +23,6 @@ app.get("/", (c) => c.json({ message: "App is running" }));
 // Routes
 app.route("/api/eth-account", ethAccount);
 app.route("/api/agent-account", agentAccount);
-app.route("/api/transaction", transaction);
 
 // Start the server
 const port = Number(process.env.PORT || "3000");
