@@ -24,7 +24,7 @@ services:
     image: pivortex/my-app@sha256:af0c4432864489eb8c6650a6dc61f03ef831240a4199e602cd4d6bd8f4d7163f
     container_name: shade-agent-app
     ports:
-      - "3000:3000"
+      - "8080:8080"
     volumes:
       - /var/run/tappd.sock:/var/run/tappd.sock
     restart: always

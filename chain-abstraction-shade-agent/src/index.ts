@@ -12,6 +12,7 @@ if (process.env.NODE_ENV !== "production") {
 import agentAccount from "./routes/agentAccount";
 import btcAccount from "./routes/btcAccount";
 import ethAccount from "./routes/ethAccount";
+import createOrderByIntent from "./routes/createOrderByIntent";
 
 const app = new Hono();
 
@@ -26,8 +27,10 @@ app.route("/api/agent-account", agentAccount);
 app.route("/api/btc-account", btcAccount);
 app.route("/api/eth-account", ethAccount);
 
+app.route("/api/create-order-by-intent", createOrderByIntent);
+
 // Start the server
-const port = Number(process.env.PORT || "3000");
+const port = Number(process.env.PORT || "8080");
 
 console.log(`App is running on port ${port}`);
 
