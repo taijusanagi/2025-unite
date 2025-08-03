@@ -1,7 +1,7 @@
 // app/api/admin/refill/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { Wallet, Contract, parseEther, JsonRpcProvider } from "ethers";
-import { config } from "@/lib/config";
+import { config } from "@sdk/config";
 
 import IWETHContract from "@sdk/evm/contracts/IWETH.json";
 import ResolverContract from "@sdk/evm/contracts/Resolver.json";

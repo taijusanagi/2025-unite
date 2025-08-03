@@ -5,11 +5,11 @@ import { FaGithub } from "react-icons/fa";
 import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
 import { uint8ArrayToHex, UINT_256_MAX, UINT_40_MAX } from "@1inch/byte-utils";
 import { randomBytes } from "crypto";
-import { Contract, keccak256 } from "ethers";
+import { Contract } from "ethers";
 import { useEthersSigner } from "@/hooks/useEthersSigner";
 import { useAccount, useChainId } from "wagmi";
 
-import { config } from "@/lib/config";
+import { config } from "@sdk/config";
 import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal";
 import BtcConnectModal from "@/components/BtcConnectModal"; // Import the new BTC modal
@@ -273,7 +273,7 @@ export default function Home() {
         makerAsset = new Address(config[srcChainId].wrappedNative!);
       }
 
-      let resolverAddress = new Address(nativeTokenAddress);
+      let resolverAddress = new Address(nullAddress);
       if (config[srcChainId].type === "evm") {
         resolverAddress = new Address(config[srcChainId].resolver!);
       }
