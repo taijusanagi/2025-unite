@@ -60,6 +60,14 @@ When a user initiates a swap via GattaiSwap, it interacts with a chain signature
 
 We also support Etherlink and Monad, with bidirectional swaps with BTC successfully tested.
 
+## Limitation
+
+- Bitcoin script can set timestamp or block height (relative/absolute) to ensure the transaction occurs after the specified timing. But it cannot enforce an upper time limit.
+
+- Bitcoin script can define who is allowed to spend the transaction but cannot enforce a specific recipient. So relayer cannot withdraw on behalf of the user or perform public withdrawals and cancellations.
+
+- On-chain Dutch Auction or Partial Fill is not feasible. It may require off-chain coordination or would break the current 1inch Fusion + Flow model.
+
 ## Partner Integration
 
 ### 1inch Fusion + Extension and Building Full Application
