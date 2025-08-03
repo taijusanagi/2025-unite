@@ -8,7 +8,6 @@ import Sdk from "../../../chains/sdk/evm/cross-chain-sdk-shims";
 import {
   dummySrcChainId,
   dummyDstChainId,
-  nativeTokenAddress,
   nullAddress,
 } from "../../../chains/sdk/evm/constants";
 import {
@@ -28,7 +27,6 @@ import { Evm } from "../utils/ethereum";
 import { utils } from "chainsig.js";
 const { toRSV, uint8ArrayToHex } = utils.cryptography;
 
-const BTC_CHAIN_ID = 99999;
 const BTC_RESOLVER_PUBKEY = process.env.NEXT_PUBLIC_BTC_RESOLVER_PUBLIC_KEY!;
 const NETWORK = bitcoin.networks.testnet;
 
@@ -40,11 +38,13 @@ app.post("/order", async (c) => {
       srcChainId,
       dstChainId,
       makerAsset,
+      takerAsset,
       amount = 5000,
     }: {
       srcChainId: number;
       dstChainId: number;
       makerAsset: string;
+      takerAsset: string;
       amount: number;
     } = await c.req.json();
 
@@ -105,12 +105,6 @@ app.post("/order", async (c) => {
     if (config[dstChainId]?.type === "evm") {
       resolverAddress = new Sdk.Address(config[srcChainId].resolver!);
       console.log("🧩 Resolver:", resolverAddress.value);
-    }
-
-    let takerAsset = new Sdk.Address(nativeTokenAddress);
-    if (config[dstChainId]?.type === "evm") {
-      takerAsset = new Sdk.Address(config[dstChainId].wrappedNative!);
-      console.log("🎯 Taker asset:", takerAsset.value);
     }
 
     let receiver;
@@ -223,7 +217,7 @@ app.post("/order", async (c) => {
         makingAmount: BigInt(amount),
         takingAmount: BigInt(takingAmount),
         makerAsset: new Sdk.Address(makerAsset),
-        takerAsset,
+        takerAsset: new Sdk.Address(takerAsset),
         receiver,
       },
       {
