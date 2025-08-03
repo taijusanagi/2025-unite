@@ -691,6 +691,8 @@ export default function Home() {
           });
 
           spendPsbt.finalizeInput(0, (_: number, input: any) => {
+            console.log("input", input);
+
             const signature = input.partialSig[0].signature;
             const unlockingScript = bitcoin.script.compile([
               signature,

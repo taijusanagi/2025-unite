@@ -40,14 +40,14 @@ class AgentSigner implements SignerAsync {
       payload: hash.toString("hex"),
     });
 
-    console.log("signatureResponse", signatureResponse);
     const rsvSignature = toRSV(signatureResponse);
-    console.log("rsvSignature", rsvSignature);
-    // bitcoinjs-lib expects a 64-byte compact (r+s) signature.
-    return Buffer.concat([
-      Buffer.from(rsvSignature.r),
-      Buffer.from(rsvSignature.s),
-    ]);
+
+    // The Fix: Tell Buffer.from() that the strings are in hex format.
+    const r = Buffer.from(rsvSignature.r, "hex");
+    const s = Buffer.from(rsvSignature.s, "hex");
+
+    // This will now correctly create a 64-byte buffer (32 bytes for r + 32 bytes for s).
+    return Buffer.concat([r, s]);
   }
 }
 
@@ -96,7 +96,9 @@ app.post("/", async (c) => {
 
     // ### 4. Finalize with HTLC script ###
     psbt.finalizeInput(0, (inputIndex: any, input: any) => {
-      const derSignature = input.partialSigs[0].signature;
+      console.log("input", input);
+
+      const derSignature = input.partialSig[0].signature;
       const unlockingScript = bitcoin.script.compile([
         derSignature,
         Buffer.from(secret, "hex"),

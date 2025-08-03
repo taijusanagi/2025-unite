@@ -22,8 +22,6 @@ export class Resolver {
         amount: bigint,
         hashLock = order.escrowExtension.hashLockInfo
     ): TransactionRequest {
-        console.log(chainId, lop, order, signature, takerTraits, amount, hashLock)
-
         const {r, yParityAndS: vs} = Signature.from(signature)
         const {args, trait} = takerTraits.encode()
         const immutables = order.toSrcImmutables(chainId, new Sdk.Address(this.srcAddress), amount, hashLock)
