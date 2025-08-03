@@ -34,6 +34,7 @@ import {
 import * as bitcoin from "bitcoinjs-lib";
 
 import { walletFromWIF, BtcWallet } from "@sdk/btc";
+import ConnectGattaiModal from "@/components/ConnectGattaiModal";
 
 const network = bitcoin.networks.testnet;
 
@@ -70,6 +71,9 @@ export default function Home() {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isBtcConnectModalOpen, setIsBtcConnectModalOpen] = useState(false);
   const [isBtcAccountModalOpen, setIsBtcAccountModalOpen] = useState(false);
+  const [isGattaiConnectModalOpen, setIsGattaiConnectModalOpen] =
+    useState(false);
+  const [gattaiAgentUrl, setGattaiAgentUrl] = useState<string | null>(null);
   const [statuses, setStatuses] = useState<Status[]>([]);
 
   // Check for saved BTC private key on mount
@@ -97,8 +101,11 @@ export default function Home() {
 
   // Handler for opening the BTC private key modal
   const btcConnectWallet = () => {
-    setIsConnectModalOpen(false); // Close the general connect modal
     setIsBtcConnectModalOpen(true); // Open the specific BTC modal
+  };
+
+  const onConnectGattai = () => {
+    setIsGattaiConnectModalOpen(true);
   };
 
   // Handler for saving the BTC private key from the modal
@@ -118,6 +125,11 @@ export default function Home() {
       localStorage.removeItem("btcPrivateKey");
       setBtcUser(null);
     }
+  };
+
+  const handleGattaiConnect = (url: string) => {
+    setGattaiAgentUrl(url);
+    setIsGattaiConnectModalOpen(false);
   };
 
   const createOrder = async () => {
@@ -846,9 +858,7 @@ export default function Home() {
         onClose={() => setIsConnectModalOpen(false)}
         onConnectEVM={evmConnectWallet}
         onConnectBTC={btcConnectWallet}
-        onConnectGattai={() =>
-          alert("Gattai Wallet connection not implemented yet.")
-        }
+        onConnectGattai={onConnectGattai}
         isEvmConnected={!!evmSigner}
         isBtcConnected={!!btcUser}
       />
@@ -856,6 +866,11 @@ export default function Home() {
         isOpen={isBtcConnectModalOpen}
         onClose={() => setIsBtcConnectModalOpen(false)}
         onConnect={handleBtcConnect}
+      />
+      <ConnectGattaiModal
+        isOpen={isGattaiConnectModalOpen}
+        onClose={() => setIsGattaiConnectModalOpen(false)}
+        onConnect={handleGattaiConnect}
       />
       <BtcAccountModal
         isOpen={isBtcAccountModalOpen}
