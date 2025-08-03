@@ -273,7 +273,7 @@ export default function Home() {
         makerAsset = new Address(config[srcChainId].wrappedNative!);
       }
 
-      let resolverAddress = new Address(nativeTokenAddress);
+      let resolverAddress = new Address(nullAddress);
       if (config[srcChainId].type === "evm") {
         resolverAddress = new Address(config[srcChainId].resolver!);
       }
