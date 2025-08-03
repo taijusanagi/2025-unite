@@ -1,34 +1,102 @@
 # GattaiSwap
 
-Fusion unleashed. Chains united.
+Fusion unleashed. Chains Abstracted.
 
-## Base Sepolia
+Gattai Swap is a cross-chain swap app built on 1inch Fusion+, enabling seamless swaps across Bitcoin, Monad, and Etherlink. It also integrates NEAR chain signatures via the Shade Agent Framework to execute 1inch cross-chain orders in a fully chain-abstracted manner.
 
-Limit Order Protocol
-https://sepolia.basescan.org/address/0xbC4F8be648a7d7783918E80761857403835111fd
+## Description
 
-Escrow Factory
-https://sepolia.basescan.org/address/0x99275358DC3931Bcb10FfDd4DFa6276C38D9a6f0
+Fusion Unleashed. Chains Abstracted.
 
-Resolver
-https://sepolia.basescan.org/address/0x88049d50AAE11BAa334b5E86B6B90BaE078f5851
+GattaiSwap is driven by two core visions:
 
-TrueERC20
-https://sepolia.basescan.org/address/0x93992AF843537Cf0A07E6638ABbbFB837111C753
+1. A Unified Atomic Swap Interface via 1inch Fusion+ Extension
 
-## Arbitrum Sepolia
+GattaiSwap extends the 1inch Fusion+ protocol to support a broader set of blockchains. For this hackathon, we successfully integrated Bitcoin, Monad, and Etherlink, enabling seamless bidirectional cross-chain swaps between BTC and EVM-compatible chains like Monad and Etherlink. This proves that Fusion+ can serve as a universal layer for trustless atomic swaps beyond traditional EVM boundaries.
 
-Limit Order Protocol
-https://sepolia.arbiscan.io/address/0x3fd6bdD2c7a06159D7762D06316eCac7c173763a
+2. Seamless Multi-Wallet Management in a Chain-Abstracted Context
 
-Escrow Factory
-https://sepolia.arbiscan.io/address/0x2C5450114e3Efb39fEDc5e9F781AfEfF944aE224
+GattaiSwap tackles the complexity of managing multiple wallets across heterogeneous chains by enabling chain-abstracted cross-chain orders. Using NEAR chain signatures and the Shade Agent Framework, we implemented a secure Trusted Execution Environment (TEE) that acts as a solver for 1inch orders. This TEE can sign both BTC and ETH-based cross-chain orders from a single environment—non-custodially—eliminating the friction of fragmented key management across chains.
 
-Resolver
-https://sepolia.arbiscan.io/address/0x915e0305E320317C9D77187b195a682858A254c0
+Gattai Swap is a cross-chain swap app built on 1inch Fusion+, enabling seamless swaps across Bitcoin, Monad, and Etherlink. It also integrates NEAR chain signatures via the Shade Agent Framework to execute 1inch cross-chain orders in a fully chain-abstracted manner.
 
-TrueERC20
-https://sepolia.arbiscan.io/address/0xd9daCF5a9b61F951373386216744A9F42710A6A7
+## How it's made
+
+🔁 1. Atomic Swap Mechanism Using Bitcoin HTLC
+
+GattaiSwap utilizes Hash Time-Locked Contracts (HTLCs) on Bitcoin to achieve atomicity in cross-chain swaps. It leverages the 1inch cross-chain SDK and existing 1inch smart contracts deployed on both EVM chains and Bitcoin (via script-based logic).
+
+🔹 When the Maker Asset is BTC:
+
+A hashed lock script is generated on the Bitcoin side using the timelock and hash preimage from the 1inch cross-chain order.
+
+The user (maker) signs a funding transaction locking BTC into the HTLC — but does not broadcast it.
+
+The signed transaction and order data are passed to a relayer.
+
+The relayer signals resolvers, and the resolver broadcasts the signed transaction, officially locking the maker's BTC.
+
+Using the mined transaction details, the resolver creates an escrow on the destination chain, completing the bidirectional swap setup.
+
+⏱ Note: The Bitcoin HTLC uses relative time checks, since the timelock begins once the btc transaction is confirmed.
+
+🔹 When the Taker Asset is BTC:
+
+The maker creates a 1inch cross-chain swap order.
+
+The resolver sets up a hashed lock address on Bitcoin to serve as escrow.
+
+⏱ Note: The Bitcoin HTLC uses absolute time checks, since the timelock begins once the eth transaction is confirmed.
+
+🔐 2. Chain-Abstraction via NEAR Signatures & Shade Agent Framework
+
+GattaiSwap solves multi-wallet complexity through chain abstraction:
+
+When a user initiates a swap via GattaiSwap, it interacts with a chain signature contract on NEAR to derive a usable address and sign messages. The Shade Agent Framework is employed to generate and sign 1inch cross-chain orders from a Trusted Execution Environment (TEE). The shade agent uses the request_signature functionality to securely sign both BTC and ETH-based orders—without compromising custodial control.
+
+## Partner Integration
+
+### 1inch Fusion + Extension and Building Full Application
+
+I added support for BTC, Monad, and Etherlink. The swap functionality is bidirectional and includes a UI with detailed status displays. I also implemented NEAR’s Shade Agent with chain signatures to sign BTC and ETH cross-chain orders within a TEE environment, demonstrating the potential for chain abstraction.
+
+I primarily used a cross-chain swap SDK and existing smart contracts, making our implementation easily integrable with the 1inch protocol in the future. We closely studied the whitepaper and aimed to align our flow with 1inch Fusion and the existing architecture.
+
+The Main implementations are follows.
+
+Deploy Script
+https://github.com/taijusanagi/2025-unite/blob/main/chains/script/evm/Deploy.s.sol
+
+BTC SDK includes HTCL Script
+https://github.com/taijusanagi/2025-unite/blob/main/chains/sdk/btc/index.ts#L179
+
+Local Swap Test for BTC <> ETH
+https://github.com/taijusanagi/2025-unite/blob/main/chains/tests/btc.spec.ts
+
+UI - CreateOrder
+https://github.com/taijusanagi/2025-unite/blob/main/app/src/app/page.tsx#L169
+
+Resolver - Create Escrow
+https://github.com/taijusanagi/2025-unite/blob/main/app/src/app/api/resolver/orders/%5Bhash%5D/escrow/route.ts
+
+Resoler - Withdraw
+https://github.com/taijusanagi/2025-unite/blob/main/app/src/app/api/resolver/orders/%5Bhash%5D/withdraw/route.ts
+
+### NEAR - 1inch Fusion+ Solver Built with NEAR's Shade Agent Framework
+
+I integrated the 1inch Fusion+ Solver, built using NEAR’s Shade Agent Framework, into our application. The app supports cross-chain swaps between BTC and ETH, with unified wallet management enabled by NEAR’s chain signature, which supports both ETH and BTC order signing.
+
+The solver takes trade intents—including makerAsset, takerAsset, and amount—then the agent constructs a 1inch cross-chain order, signed using NEAR’s chain signature.
+
+I believe this architecture lays the foundation for true chain abstraction.
+
+### Etherlink
+
+I deployed 1inch protocol's Limit Order Protocol, Escrow Factory, Resolver, and TrueERC20 contracts to enable cross-chain swaps with Etherlink. These contracts and the associated SDK were originally built for mainnet, so I modified the supported chains and hash mechanisms to ensure compatibility with Etherlink.
+
+Additionally, I tested a cross-chain swap between Etherlink and BTC, demonstrating the potential for integrating cross-chain swap functionality within Etherlink.
+
+### Deployments
 
 ## Monad
 
@@ -46,50 +114,14 @@ https://testnet.monadexplorer.com/address/0xf927004F33f26CaA1763BB21454Ef36AA76e
 
 ## Etherlink
 
-== Logs ==
-LimitOrderProtocol deployed at: 0x64BE4a6b41A5910b56e26c587454cDc023614e92
-EscrowFactory deployed at: 0x7c054c1081F747cbC39Aa4899A53378eA66b3Dea
-Resolver deployed at: 0xF920618C3CF765cE5570A15665C50b3e3f287352
-ERC20True deployed at: 0x436b7B4d6cBe36A8cE531b5C5DAa3Eb369035EF4
+Limit Order Protocol
+https://testnet.explorer.etherlink.com/address/0x64BE4a6b41A5910b56e26c587454cDc023614e92
 
-## Patch on SDK
+Escrow Factory
+https://testnet.explorer.etherlink.com/address/0x7c054c1081F747cbC39Aa4899A53378eA66b3Dea
 
-- limit-order-sdk/dist/cjs/limit-order/eip712/domain.js
-- limit-order-sdk/dist/cjs/constant.js
-- cross-chain-sdk/dist/cjs/chain.js
-- cross-chain-sdk/dist/cjs/deployment.js
+Resolver
+https://testnet.explorer.etherlink.com/address/0xF920618C3CF765cE5570A15665C50b3e3f287352
 
-## Memo
-
-```
-docker run --name esplora \
-  -p 50001:50001 -p 8094:80 \
-  --rm -i -t blockstream/esplora \
-  bash -c "/srv/explorer/run.sh bitcoin-regtest explorer"
-```
-
-```
-docker exec -it esplora bash
-```
-
-```
-alias bitcoin-cli='/srv/explorer/bitcoin/bin/bitcoin-cli -regtest -rpccookiefile=/data/bitcoin/regtest/.cookie'
-```
-
-```
-bitcoin-cli createwallet mining_address
-MINING_ADDRESS=$(bitcoin-cli -rpcwallet=mining_address getnewaddress)
-```
-
-```
-bitcoin-cli -rpcwallet=mining_address generatetoaddress 101 $MINING_ADDRESS
-```
-
-```
-bitcoin-cli -rpcwallet=mining_address sendtoaddress bcrt1qvt45lgurdr30xk265nqg9wdkzm8n6kcmcrq4fz 1
-bitcoin-cli -rpcwallet=mining_address sendtoaddress bcrt1qc8whyxx6x637j6328weljzw4clgq9sff64d4zc 1
-```
-
-### BTC Faucet
-
-https://coinfaucet.eu/en/btc-testnet/
+TrueERC20
+https://testnet.explorer.etherlink.com/address/0x436b7B4d6cBe36A8cE531b5C5DAa3Eb369035EF4

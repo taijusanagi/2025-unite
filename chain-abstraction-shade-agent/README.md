@@ -70,7 +70,7 @@ For Linux
 sudo systemctl start docker
 ```
 
-- Install dependencies 
+- Install dependencies
 
 ```bash
 npm i

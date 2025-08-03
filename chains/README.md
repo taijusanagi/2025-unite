@@ -31,7 +31,7 @@ SRC_CHAIN_RPC=ETH_FORK_URL DST_CHAIN_RPC=BNB_FORK_URL pnpm test
 ### Public rpc
 
 | Chain    | Url                          |
-|----------|------------------------------|
+| -------- | ---------------------------- |
 | Ethereum | https://eth.merkle.io        |
 | BSC      | wss://bsc-rpc.publicnode.com |
 
