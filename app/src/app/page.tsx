@@ -226,10 +226,6 @@ export default function Home() {
 
       if (gattaiWalletConfig) {
         addStatus("Creating order via Gattai Wallet");
-
-        console.log("makerAsset", makerAsset);
-        console.log("makerAsset.value", makerAsset.value);
-
         const res = await fetch(
           `${gattaiAgentUrl}/api/create-order-by-intent`,
           {
@@ -251,7 +247,9 @@ export default function Home() {
 
         const data = await res.json();
 
-        secret = data.secret;
+        console.log("response from gattai wallet: ", data);
+
+        secret = Buffer.from(data.secret);
         hashLock = data.hashLock;
         order = data.order;
         orderHash = data.hash;
@@ -539,10 +537,24 @@ export default function Home() {
         }
 
         order = order.build();
-        btcUserPublicKey = btcUser!.publicKey.toString("hex");
+        btcUserPublicKey = btcUser?.publicKey.toString("hex");
         updateLastStatus("done");
       }
       addStatus("Submitting order to relayer");
+
+      console.log("sending params:", {
+        hash: orderHash,
+        hashLock: {
+          sha256: hashLock.sha256.toString("hex"),
+        },
+        srcChainId,
+        dstChainId,
+        order,
+        extension,
+        signature,
+        btcUserPublicKey,
+      });
+
       const res = await fetch("/api/relayer/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

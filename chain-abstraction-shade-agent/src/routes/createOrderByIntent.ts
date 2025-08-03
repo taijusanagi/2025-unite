@@ -69,7 +69,7 @@ app.post("/", async (c) => {
     // 1. Derive sender address
     let makerAddress: string;
     let makerAddressInBtcFormat: string;
-    let btcUserPublicKey;
+    let btcUserPublicKey = "";
 
     if (config[srcChainId]?.type === "evm") {
       const { address } = await srcEvm.deriveAddressAndPublicKey(
@@ -368,7 +368,7 @@ app.post("/", async (c) => {
 
     console.log("✅ Order constructed and signed successfully.");
     return c.json({
-      secret: secret,
+      secret: secret.toString("hex"),
       hash,
       hashLock: {
         sha256: hashLock.sha256.toString("hex"),
