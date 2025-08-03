@@ -144,6 +144,7 @@ export async function POST(
         config[srcChainId].escrowFactory!
       );
       console.log("Deploying source escrow contract...");
+
       const {
         txHash: _srcDeployHash,
         blockNumber: srcDeployBlockNumber,

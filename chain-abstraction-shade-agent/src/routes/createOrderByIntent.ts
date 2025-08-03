@@ -103,13 +103,13 @@ app.post("/", async (c) => {
     console.log("config[dstChainId]", config[dstChainId]);
 
     let escrowFacotryAddress = new Sdk.Address(nullAddress);
-    if (config[dstChainId]?.type === "evm") {
+    if (config[srcChainId]?.type === "evm") {
       escrowFacotryAddress = new Sdk.Address(config[srcChainId].escrowFactory);
       console.log("🏗️ Escrow factory:", escrowFacotryAddress.val);
     }
 
     let resolverAddress = new Sdk.Address(nullAddress);
-    if (config[dstChainId]?.type === "evm") {
+    if (config[srcChainId]?.type === "evm") {
       resolverAddress = new Sdk.Address(config[srcChainId].resolver!);
       console.log("🧩 Resolver:", resolverAddress.val);
     }
@@ -121,7 +121,7 @@ app.post("/", async (c) => {
     }
 
     // 3. Deposit + approve logic for EVM
-    if (config[dstChainId]?.type === "evm") {
+    if (config[srcChainId]?.type === "evm") {
       const provider = new JsonRpcProvider(config[srcChainId].rpc);
       console.log("🔧 Performing EVM deposit & approve...");
 
@@ -283,7 +283,7 @@ app.post("/", async (c) => {
     order.inner.fusionExtension.srcChainId = srcChainId;
     order.inner.fusionExtension.dstChainId = dstChainId;
 
-    if (config[dstChainId]?.type === "evm") {
+    if (config[srcChainId]?.type === "evm") {
       order.inner.inner.takerAsset = new Sdk.Address(
         config[srcChainId].trueERC20!
       );
