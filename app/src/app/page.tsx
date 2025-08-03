@@ -1,4 +1,3 @@
-// app/page.tsx
 "use client";
 import React, { useEffect, useState } from "react";
 import { FaGithub } from "react-icons/fa";
@@ -12,8 +11,10 @@ import { useAccount, useChainId } from "wagmi";
 import { config } from "@sdk/config";
 import StatusModal, { Status, StatusState } from "@/components/StatusModal";
 import ConnectModal from "@/components/ConnectModal";
-import BtcConnectModal from "@/components/BtcConnectModal"; // Import the new BTC modal
+import BtcConnectModal from "@/components/BtcConnectModal";
 import BtcAccountModal from "@/components/BtcAccountModal";
+import ConnectGattaiModal from "@/components/ConnectGattaiModal";
+import GattaiWalletAccountModal from "@/components/GattaiWalletAccountModal"; // Import the new modal
 
 import Sdk from "@sdk/evm/cross-chain-sdk-shims";
 import {
@@ -32,7 +33,6 @@ import {
 } from "@sdk/btc";
 
 import * as bitcoin from "bitcoinjs-lib";
-
 import { walletFromWIF, BtcWallet } from "@sdk/btc";
 
 const network = bitcoin.networks.testnet;
@@ -62,17 +62,24 @@ export default function Home() {
   const connectedChainId = useChainId();
   const { address: evmConnectedAddress } = useAccount();
 
-  // State for BTC connection
   const [btcUser, setBtcUser] = useState<BtcWallet | null>(null);
 
-  // State for the modals
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [isBtcConnectModalOpen, setIsBtcConnectModalOpen] = useState(false);
   const [isBtcAccountModalOpen, setIsBtcAccountModalOpen] = useState(false);
+  const [isGattaiConnectModalOpen, setIsGattaiConnectModalOpen] =
+    useState(false);
+  const [isGattaiAccountModalOpen, setIsGattaiAccountModalOpen] =
+    useState(false); // State for the new modal
+
+  const [gattaiAgentUrl, setGattaiAgentUrl] = useState<string | null>(null);
+  const [gattaiWalletConfig, setGattaiWalletConfig] = useState<any | null>(
+    null
+  );
+
   const [statuses, setStatuses] = useState<Status[]>([]);
 
-  // Check for saved BTC private key on mount
   useEffect(() => {
     const savedKey = localStorage.getItem("btcPrivateKey");
     if (savedKey) {
@@ -88,25 +95,24 @@ export default function Home() {
     }
   }, []);
 
-  // Renamed from handleConnectEVM
   const evmConnectWallet = () => {
     if (openConnectModal) {
       openConnectModal();
     }
   };
 
-  // Handler for opening the BTC private key modal
   const btcConnectWallet = () => {
-    setIsConnectModalOpen(false); // Close the general connect modal
-    setIsBtcConnectModalOpen(true); // Open the specific BTC modal
+    setIsBtcConnectModalOpen(true);
   };
 
-  // Handler for saving the BTC private key from the modal
+  const onConnectGattai = () => {
+    setIsGattaiConnectModalOpen(true);
+  };
+
   const handleBtcConnect = (privateKey: string) => {
     try {
       const network = bitcoin.networks.testnet;
       const wallet = walletFromWIF(privateKey, network);
-
       localStorage.setItem("btcPrivateKey", privateKey);
       setBtcUser(wallet);
       setIsBtcConnectModalOpen(false);
@@ -118,6 +124,33 @@ export default function Home() {
       localStorage.removeItem("btcPrivateKey");
       setBtcUser(null);
     }
+  };
+
+  const handleGattaiConnect = async (url: string) => {
+    try {
+      const response = await fetch(`${url}/api/account`);
+      if (!response.ok) throw new Error("Failed to fetch Gattai wallet config");
+      const data = await response.json();
+
+      setGattaiWalletConfig({
+        accountId: data.accountId,
+        evmAddress: data.evmAddress,
+        btcAddress: data.btcAddress,
+        btcPublicKey: data.btcPublicKey,
+      });
+      setGattaiAgentUrl(url);
+      setIsGattaiConnectModalOpen(false);
+    } catch (error) {
+      console.error("Error connecting Gattai wallet:", error);
+      alert("Failed to connect to Gattai Wallet. Please check the URL.");
+    }
+  };
+
+  // Handler to disconnect from Gattai Wallet
+  const handleGattaiDisconnect = () => {
+    setGattaiWalletConfig(null);
+    setGattaiAgentUrl(null);
+    setIsGattaiAccountModalOpen(false);
   };
 
   const createOrder = async () => {
@@ -132,33 +165,6 @@ export default function Home() {
     if (fromChain.chainId === toChain.chainId) {
       console.warn("⚠️ Source and destination networks are the same.");
       alert("The source and destination networks must be different.");
-      return;
-    }
-
-    if (fromChain.type === "evm" && !evmSigner) {
-      console.warn("⚠️ EVM signer not connected.");
-      alert("Please connect your EVM wallet to place an order.");
-      evmConnectWallet();
-      return;
-    }
-
-    if (fromChain.type === "evm" && connectedChainId !== fromChain.chainId) {
-      console.warn("⚠️ Wrong EVM chain selected.");
-      alert("Please switch to the 'From' network in your wallet.");
-      return;
-    }
-
-    if (fromChain.type === "btc" && !btcUser) {
-      console.warn("⚠️ BTC user not connected for source chain.");
-      alert("Please connect your BTC wallet to place an order.");
-      btcConnectWallet();
-      return;
-    }
-
-    if (toChain.type === "btc" && !btcUser) {
-      console.warn("⚠️ BTC user not connected for destination chain.");
-      alert("Please connect your BTC wallet when destination is BTC.");
-      btcConnectWallet();
       return;
     }
 
@@ -191,287 +197,379 @@ export default function Home() {
       setStatuses(currentStatuses);
     };
 
+    const srcChainId = fromChain.chainId;
+    const dstChainId = toChain.chainId;
+
+    let makerAsset = new Address(nullAddress);
+    if (config[srcChainId].type === "evm") {
+      makerAsset = new Address(config[srcChainId].wrappedNative!);
+    }
+
+    let takerAsset = new Address(nativeTokenAddress);
+    if (config[dstChainId].type === "evm") {
+      takerAsset = new Address(config[dstChainId].wrappedNative!);
+    }
+
     try {
       console.log("🚧 Order preparation started...");
       setStatuses([]);
 
-      const srcChainId = fromChain.chainId;
-      const dstChainId = toChain.chainId;
       const btcProvider = new BtcProvider(config[99999].rpc);
 
-      if (config[srcChainId].type === "evm") {
-        const srcWrappedNativeTokenContract = new Contract(
-          config[srcChainId].wrappedNative!,
-          IWETHContract.abi,
-          evmSigner!
+      let secret,
+        hashLock,
+        order,
+        extension,
+        orderHash,
+        signature,
+        btcUserPublicKey;
+
+      if (gattaiWalletConfig) {
+        addStatus("Creating order via Gattai Wallet");
+        const res = await fetch(
+          `${gattaiAgentUrl}/api/create-order-by-intent`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              srcChainId,
+              dstChainId,
+              makerAsset: makerAsset.val,
+              takerAsset: takerAsset.val,
+              amount,
+            }),
+          }
         );
 
-        addStatus("Checking token balance");
-        const balance = await srcWrappedNativeTokenContract.balanceOf(
-          evmSigner!.address
-        );
-        console.log("💰 Token balance:", balance.toString());
+        if (!res.ok) {
+          throw new Error("Failed to create order via Gattai Wallet");
+        }
+
+        const data = await res.json();
+
+        console.log("response from gattai wallet: ", data);
+
+        secret = Buffer.from(data.secret, "hex");
+        hashLock = data.hashLock;
+        order = data.order;
+        orderHash = data.hash;
+        signature = data.signature;
+
+        extension = data.extension;
+        btcUserPublicKey = data.btcUserPublicKey;
+
         updateLastStatus("done");
+      } else {
+        if (fromChain.type === "evm" && !evmSigner) {
+          console.warn("⚠️ EVM signer not connected.");
+          alert("Please connect your EVM wallet to place an order.");
+          evmConnectWallet();
+          return;
+        }
 
-        if (balance < amount) {
-          addStatus("Depositing native token");
-          const tx = await srcWrappedNativeTokenContract.deposit({
+        if (
+          fromChain.type === "evm" &&
+          connectedChainId !== fromChain.chainId
+        ) {
+          console.warn("⚠️ Wrong EVM chain selected.");
+          alert("Please switch to the 'From' network in your wallet.");
+          return;
+        }
+
+        if (fromChain.type === "btc" && !btcUser) {
+          console.warn("⚠️ BTC user not connected for source chain.");
+          alert("Please connect your BTC wallet to place an order.");
+          btcConnectWallet();
+          return;
+        }
+
+        if (toChain.type === "btc" && !btcUser) {
+          console.warn("⚠️ BTC user not connected for destination chain.");
+          alert("Please connect your BTC wallet when destination is BTC.");
+          btcConnectWallet();
+          return;
+        }
+
+        if (config[srcChainId].type === "evm") {
+          const srcWrappedNativeTokenContract = new Contract(
+            config[srcChainId].wrappedNative!,
+            IWETHContract.abi,
+            evmSigner!
+          );
+
+          addStatus("Checking token balance");
+          const balance = await srcWrappedNativeTokenContract.balanceOf(
+            evmSigner!.address
+          );
+          console.log("💰 Token balance:", balance.toString());
+          updateLastStatus("done");
+
+          if (balance < amount) {
+            addStatus("Depositing native token");
+            const tx = await srcWrappedNativeTokenContract.deposit({
+              value: amount,
+            });
+            console.log("📤 Deposit TX:", tx.hash);
+            await tx.wait();
+            updateLastStatus("done", [
+              {
+                explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
+                network: fromChain.name,
+              },
+            ]);
+          }
+
+          addStatus("Checking token allowance");
+          const allowance = await srcWrappedNativeTokenContract.allowance(
+            evmSigner!.address,
+            config[srcChainId].limitOrderProtocol
+          );
+          console.log("🔓 Token allowance:", allowance.toString());
+          updateLastStatus("done");
+
+          if (allowance < UINT_256_MAX) {
+            addStatus("Approving token allowance");
+            const tx = await srcWrappedNativeTokenContract.approve(
+              config[srcChainId].limitOrderProtocol,
+              UINT_256_MAX
+            );
+            console.log("✍️ Approve TX:", tx.hash);
+            await tx.wait();
+            updateLastStatus("done", [
+              {
+                explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
+                network: fromChain.name,
+              },
+            ]);
+          }
+        }
+
+        addStatus("Sign the order in your wallet");
+        secret = randomBytes(32);
+        hashLock = {
+          keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
+          sha256: bitcoin.crypto.sha256(secret),
+        };
+        console.log("🔐 Hash lock created", hashLock);
+
+        const timestamp = BigInt(Math.floor(Date.now() / 1000));
+
+        let escrowFacotryAddress = new Address(nullAddress);
+        if (config[srcChainId].type === "evm") {
+          escrowFacotryAddress = new Address(config[srcChainId].escrowFactory);
+        }
+
+        let resolverAddress = new Address(nullAddress);
+        if (config[srcChainId].type === "evm") {
+          resolverAddress = new Address(config[srcChainId].resolver!);
+        }
+
+        let receiver;
+        if (config[dstChainId].type === "btc") {
+          receiver = new Address(addressToEthAddressFormat(btcUser!.address));
+        }
+
+        order = Sdk.CrossChainOrder.new(
+          escrowFacotryAddress,
+          {
+            salt: Sdk.randBigInt(1000n),
+            maker: new Address(evmSigner!.address),
+            makingAmount: BigInt(amount),
+            takingAmount: BigInt(amount),
+            makerAsset,
+            takerAsset,
+            receiver,
+          },
+          {
+            hashLock: hashLock.keccak256,
+            timeLocks: Sdk.TimeLocks.new({
+              srcWithdrawal: 1n, // to make demo in time
+              srcPublicWithdrawal: 1023n,
+              srcCancellation: 1024n, // must be 512, 1024... to set relative time check in bitcoin (only when btc = src)
+              srcPublicCancellation: 1225n,
+              dstWithdrawal: 1n, // to make demo in time
+              dstPublicWithdrawal: 511n,
+              dstCancellation: 512n,
+            }),
+            srcChainId: dummySrcChainId,
+            dstChainId: dummyDstChainId,
+            srcSafetyDeposit: 0n,
+            dstSafetyDeposit: 0n,
+          },
+          {
+            auction: new Sdk.AuctionDetails({
+              initialRateBump: 0,
+              points: [],
+              duration: 120n,
+              startTime: timestamp,
+            }),
+            whitelist: [
+              {
+                address: resolverAddress,
+                allowFrom: 0n,
+              },
+            ],
+            resolvingStartTime: 0n,
+          },
+          {
+            nonce: Sdk.randBigInt(UINT_40_MAX),
+            allowPartialFills: false,
+            allowMultipleFills: false,
+          }
+        );
+
+        // to bypass chain id, set chain id after order creation
+        order.inner.fusionExtension.srcChainId = srcChainId;
+        order.inner.fusionExtension.dstChainId = dstChainId;
+
+        if (config[srcChainId].type === "evm") {
+          // taker asset is replaced by trueERC20 in SDK, so override here
+          order.inner.inner.takerAsset = new Address(
+            config[srcChainId].trueERC20!
+          );
+        }
+
+        console.log("📦 Order constructed:", order);
+        extension = order.extension;
+        orderHash = getOrderHashWithPatch(srcChainId, order, {
+          ...patchedDomain,
+          verifyingContract: config[srcChainId].limitOrderProtocol!,
+        });
+        console.log("📡 Order hash:", orderHash);
+
+        if (config[srcChainId].type === "btc") {
+          // @ts-ignore
+          const timeLocks = order.inner.fusionExtension.timeLocks;
+
+          const htlcScript = createSrcHtlcScript(
+            orderHash,
+            hashLock.sha256,
+            timeLocks._srcWithdrawal,
+            timeLocks._srcCancellation,
+            btcUser!.publicKey,
+            Buffer.from(btcResolverPublicKey, "hex"),
+            false
+          );
+
+          const p2sh = bitcoin.payments.p2sh({
+            redeem: { output: htlcScript, network },
+            network,
+          });
+
+          console.log("🧾 HTLC P2SH Address:", p2sh.address);
+
+          const makerPayment = bitcoin.payments.p2wpkh({
+            pubkey: btcUser!.publicKey,
+            network,
+          });
+
+          const fromAddress = makerPayment.address!;
+
+          const utxos = await btcProvider.getUtxos(fromAddress);
+          if (!utxos.length) {
+            console.error("❌ No UTXOs found in maker's wallet.");
+            return;
+          }
+
+          const amount = Number(order.makingAmount);
+          const fee = 10000;
+          const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
+          const change = totalInput - amount - fee;
+
+          if (change < 0) {
+            console.error("❌ Not enough funds to lock BTC and cover the fee.");
+            return;
+          }
+
+          const psbt = new bitcoin.Psbt({ network });
+
+          if (change > 0) {
+            psbt.addOutput({
+              address: fromAddress,
+              value: change,
+            });
+          }
+
+          for (const utxo of utxos) {
+            psbt.addInput({
+              hash: utxo.txid,
+              index: utxo.vout,
+              witnessUtxo: {
+                script: makerPayment.output!,
+                value: utxo.value,
+              },
+            });
+          }
+
+          psbt.addOutput({
+            script: p2sh.output!,
             value: amount,
           });
-          console.log("📤 Deposit TX:", tx.hash);
-          await tx.wait();
-          updateLastStatus("done", [
+
+          utxos.forEach((_, idx) => {
+            psbt.signInput(idx, {
+              publicKey: btcUser!.publicKey,
+              sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
+            });
+          });
+
+          psbt.finalizeAllInputs();
+
+          const txHex = psbt.extractTransaction().toHex();
+          // The script includes orderhash, and tx is signed so use this object as signautre
+          signature = JSON.stringify({
+            txHex,
+            htlcScriptHex: htlcScript.toString("hex"),
+            p2shAddress: p2sh.address!,
+          });
+        } else {
+          const typedData = order.getTypedData(srcChainId);
+          console.log("📝 Signing typed data:", typedData);
+          signature = await evmSigner!.signTypedData(
             {
-              explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
-              network: fromChain.name,
+              chainId: srcChainId,
+              ...patchedDomain,
+              verifyingContract: config[srcChainId].limitOrderProtocol,
             },
-          ]);
-        }
-
-        addStatus("Checking token allowance");
-        const allowance = await srcWrappedNativeTokenContract.allowance(
-          evmSigner!.address,
-          config[srcChainId].limitOrderProtocol
-        );
-        console.log("🔓 Token allowance:", allowance.toString());
-        updateLastStatus("done");
-
-        if (allowance < UINT_256_MAX) {
-          addStatus("Approving token allowance");
-          const tx = await srcWrappedNativeTokenContract.approve(
-            config[srcChainId].limitOrderProtocol,
-            UINT_256_MAX
+            { Order: typedData.types[typedData.primaryType] },
+            typedData.message
           );
-          console.log("✍️ Approve TX:", tx.hash);
-          await tx.wait();
-          updateLastStatus("done", [
-            {
-              explorerUrl: `${fromChain.exproler}/tx/${tx.hash}`,
-              network: fromChain.name,
-            },
-          ]);
-        }
-      }
-
-      addStatus("Sign the order in your wallet");
-      const secret = randomBytes(32);
-      const hashLock = {
-        keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
-        sha256: bitcoin.crypto.sha256(secret),
-      };
-      console.log("🔐 Hash lock created", hashLock);
-
-      const timestamp = BigInt(Math.floor(Date.now() / 1000));
-
-      let escrowFacotryAddress = new Address(nullAddress);
-      if (config[srcChainId].type === "evm") {
-        escrowFacotryAddress = new Address(config[srcChainId].escrowFactory);
-      }
-
-      let makerAsset = new Address(nullAddress);
-      if (config[srcChainId].type === "evm") {
-        makerAsset = new Address(config[srcChainId].wrappedNative!);
-      }
-
-      let resolverAddress = new Address(nullAddress);
-      if (config[srcChainId].type === "evm") {
-        resolverAddress = new Address(config[srcChainId].resolver!);
-      }
-
-      let takerAsset = new Address(nativeTokenAddress);
-      if (config[dstChainId].type === "evm") {
-        takerAsset = new Address(config[dstChainId].wrappedNative!);
-      }
-
-      let receiver;
-      if (config[dstChainId].type === "btc") {
-        receiver = new Address(addressToEthAddressFormat(btcUser!.address));
-      }
-
-      const order = Sdk.CrossChainOrder.new(
-        escrowFacotryAddress,
-        {
-          salt: Sdk.randBigInt(1000n),
-          maker: new Address(evmSigner!.address),
-          makingAmount: BigInt(amount),
-          takingAmount: BigInt(amount),
-          makerAsset,
-          takerAsset,
-          receiver,
-        },
-        {
-          hashLock: hashLock.keccak256,
-          timeLocks: Sdk.TimeLocks.new({
-            srcWithdrawal: 1n, // to make demo in time
-            srcPublicWithdrawal: 1023n,
-            srcCancellation: 1024n, // must be 512, 1024... to set relative time check in bitcoin (only when btc = src)
-            srcPublicCancellation: 1225n,
-            dstWithdrawal: 1n, // to make demo in time
-            dstPublicWithdrawal: 511n,
-            dstCancellation: 512n,
-          }),
-          srcChainId: dummySrcChainId,
-          dstChainId: dummyDstChainId,
-          srcSafetyDeposit: 0n,
-          dstSafetyDeposit: 0n,
-        },
-        {
-          auction: new Sdk.AuctionDetails({
-            initialRateBump: 0,
-            points: [],
-            duration: 120n,
-            startTime: timestamp,
-          }),
-          whitelist: [
-            {
-              address: resolverAddress,
-              allowFrom: 0n,
-            },
-          ],
-          resolvingStartTime: 0n,
-        },
-        {
-          nonce: Sdk.randBigInt(UINT_40_MAX),
-          allowPartialFills: false,
-          allowMultipleFills: false,
-        }
-      );
-
-      // to bypass chain id, set chain id after order creation
-      order.inner.fusionExtension.srcChainId = srcChainId;
-      order.inner.fusionExtension.dstChainId = dstChainId;
-
-      if (config[srcChainId].type === "evm") {
-        // taker asset is replaced by trueERC20 in SDK, so override here
-        order.inner.inner.takerAsset = new Address(
-          config[srcChainId].trueERC20!
-        );
-      }
-      let signature = "";
-
-      console.log("📦 Order constructed:", order);
-      const hash = getOrderHashWithPatch(srcChainId, order, {
-        ...patchedDomain,
-        verifyingContract: config[srcChainId].limitOrderProtocol!,
-      });
-      console.log("📡 Order hash:", hash);
-
-      if (config[srcChainId].type === "btc") {
-        // @ts-ignore
-        const timeLocks = order.inner.fusionExtension.timeLocks;
-
-        const htlcScript = createSrcHtlcScript(
-          hash,
-          hashLock.sha256,
-          timeLocks._srcWithdrawal,
-          timeLocks._srcCancellation,
-          btcUser!.publicKey,
-          Buffer.from(btcResolverPublicKey, "hex"),
-          false
-        );
-
-        const p2sh = bitcoin.payments.p2sh({
-          redeem: { output: htlcScript, network },
-          network,
-        });
-
-        console.log("🧾 HTLC P2SH Address:", p2sh.address);
-
-        const makerPayment = bitcoin.payments.p2wpkh({
-          pubkey: btcUser!.publicKey,
-          network,
-        });
-
-        const fromAddress = makerPayment.address!;
-
-        const utxos = await btcProvider.getUtxos(fromAddress);
-        if (!utxos.length) {
-          console.error("❌ No UTXOs found in maker's wallet.");
-          return;
         }
 
-        const amount = Number(order.makingAmount);
-        const fee = 10000;
-        const totalInput = utxos.reduce((sum, utxo) => sum + utxo.value, 0);
-        const change = totalInput - amount - fee;
-
-        if (change < 0) {
-          console.error("❌ Not enough funds to lock BTC and cover the fee.");
-          return;
-        }
-
-        const psbt = new bitcoin.Psbt({ network });
-
-        if (change > 0) {
-          psbt.addOutput({
-            address: fromAddress,
-            value: change,
-          });
-        }
-
-        for (const utxo of utxos) {
-          psbt.addInput({
-            hash: utxo.txid,
-            index: utxo.vout,
-            witnessUtxo: {
-              script: makerPayment.output!,
-              value: utxo.value,
-            },
-          });
-        }
-
-        psbt.addOutput({
-          script: p2sh.output!,
-          value: amount,
-        });
-
-        utxos.forEach((_, idx) => {
-          psbt.signInput(idx, {
-            publicKey: btcUser!.publicKey,
-            sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
-          });
-        });
-
-        psbt.finalizeAllInputs();
-
-        const txHex = psbt.extractTransaction().toHex();
-        // The script includes orderhash, and tx is signed so use this object as signautre
-        signature = JSON.stringify({
-          txHex,
-          htlcScriptHex: htlcScript.toString("hex"),
-          p2shAddress: p2sh.address!,
-        });
-      } else {
-        const typedData = order.getTypedData(srcChainId);
-        console.log("📝 Signing typed data:", typedData);
-        signature = await evmSigner!.signTypedData(
-          {
-            chainId: srcChainId,
-            ...patchedDomain,
-            verifyingContract: config[srcChainId].limitOrderProtocol,
-          },
-          { Order: typedData.types[typedData.primaryType] },
-          typedData.message
-        );
+        order = order.build();
+        btcUserPublicKey = btcUser?.publicKey.toString("hex");
+        updateLastStatus("done");
       }
-      updateLastStatus("done");
-
       addStatus("Submitting order to relayer");
+
+      console.log("sending params:", {
+        hash: orderHash,
+        hashLock: {
+          sha256: hashLock.sha256.toString("hex"),
+        },
+        srcChainId,
+        dstChainId,
+        order,
+        extension,
+        signature,
+        btcUserPublicKey,
+      });
+
       const res = await fetch("/api/relayer/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           {
-            hash,
+            hash: orderHash,
             hashLock: {
               sha256: hashLock.sha256.toString("hex"),
             },
             srcChainId,
             dstChainId,
-            order: order.build(),
-            extension: order.extension,
+            order,
+            extension,
             signature,
-            btcUserPublicKey: btcUser!.publicKey.toString("hex"),
+            btcUserPublicKey,
           },
           (_, v) => (typeof v === "bigint" ? v.toString() : v)
         ),
@@ -483,7 +581,9 @@ export default function Home() {
 
       addStatus("Waiting for escrow creation");
       while (true) {
-        const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
+        const statusRes = await fetch(
+          `/api/relayer/orders/${orderHash}/status`
+        );
         const statusJson = await statusRes.json();
         if (statusJson.status === "escrow_created") {
           console.log("🏗️ Escrow created:", statusJson);
@@ -506,7 +606,7 @@ export default function Home() {
         addStatus("Redeeming BTC HTLC");
         console.log("🔁 Starting BTC claim flow");
         const dstWithdrawParamsRes = await fetch(
-          `/api/relayer/orders/${hash}/btc/dst-withdraw-params`
+          `/api/relayer/orders/${orderHash}/btc/dst-withdraw-params`
         );
         if (!dstWithdrawParamsRes.ok)
           throw new Error("Failed to fetch BTC withdraw params");
@@ -514,76 +614,108 @@ export default function Home() {
         const dstWithdrawParamsJson = await dstWithdrawParamsRes.json();
         console.log("📬 BTC withdraw params:", dstWithdrawParamsJson);
 
-        const rawTxHex = await btcProvider.getRawTransactionHex(
-          dstWithdrawParamsJson.dstEscrowAddress
-        );
+        let finalTxId;
 
-        const spendPsbt = new bitcoin.Psbt({ network });
-        console.log(
-          "dstWithdrawParamsJson.htlcScript",
-          dstWithdrawParamsJson.htlcScript
-        );
-        const htlcScript = Buffer.from(dstWithdrawParamsJson.htlcScript, "hex");
-
-        await btcProvider.verifyHTLCScriptHashFromTx(
-          dstWithdrawParamsJson.dstEscrowAddress,
-          htlcScript
-        );
-
-        // this should work after waiting Median Confirmation Time
-        // const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
-        //   BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
-        // ).toDstTimeLocks();
-        // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
-        spendPsbt.addInput({
-          hash: dstWithdrawParamsJson.dstEscrowAddress,
-          index: 0,
-          nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
-          redeemScript: htlcScript,
-          sequence: 0xfffffffe,
-        });
-
-        const redeemFee = 1000;
-        const redeemValue =
-          dstWithdrawParamsJson.dstImmutables.amount - redeemFee;
-        if (redeemValue <= 0) {
-          console.error("❌ Not enough value to redeem HTLC.");
-          return;
-        }
-
-        spendPsbt.addOutput({
-          address: btcUser!.address,
-          value: redeemValue,
-        });
-
-        spendPsbt.signInput(0, {
-          publicKey: btcUser!.publicKey,
-          sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
-        });
-
-        spendPsbt.finalizeInput(0, (_: number, input: any) => {
-          const signature = input.partialSig[0].signature;
-          const unlockingScript = bitcoin.script.compile([
-            signature,
-            secret,
-            bitcoin.opcodes.OP_TRUE,
-          ]);
-
-          const payment = bitcoin.payments.p2sh({
-            redeem: {
-              input: unlockingScript,
-              output: htlcScript,
-            },
+        // 2. Decide HOW to claim: via agent or locally.
+        if (gattaiWalletConfig) {
+          // Agent Flow: Call the backend to sign and broadcast.
+          console.log("...via Gattai Wallet Agent");
+          const claimRes = await fetch(`${gattaiAgentUrl}/api/claim-btc`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              secret: secret.toString("hex"),
+              dstEscrowAddress: dstWithdrawParamsJson.dstEscrowAddress,
+              htlcScriptHex: dstWithdrawParamsJson.htlcScript,
+              amount: dstWithdrawParamsJson.dstImmutables.amount,
+            }),
           });
 
-          return {
-            finalScriptSig: payment.input,
-            finalScriptWitness: undefined,
-          };
-        });
+          if (!claimRes.ok) {
+            const errorData = await claimRes.json();
+            throw new Error(
+              `Failed to claim BTC via Agent: ${errorData.message}`
+            );
+          }
+          const { txId } = await claimRes.json();
+          finalTxId = txId;
+        } else {
+          const rawTxHex = await btcProvider.getRawTransactionHex(
+            dstWithdrawParamsJson.dstEscrowAddress
+          );
 
-        const finalTxHex = spendPsbt.extractTransaction().toHex();
-        const finalTxId = await btcProvider.broadcastTx(finalTxHex);
+          const spendPsbt = new bitcoin.Psbt({ network });
+          console.log(
+            "dstWithdrawParamsJson.htlcScript",
+            dstWithdrawParamsJson.htlcScript
+          );
+          const htlcScript = Buffer.from(
+            dstWithdrawParamsJson.htlcScript,
+            "hex"
+          );
+
+          await btcProvider.verifyHTLCScriptHashFromTx(
+            dstWithdrawParamsJson.dstEscrowAddress,
+            htlcScript
+          );
+
+          // this should work after waiting Median Confirmation Time
+          // const dstTimeLocks = Sdk.TimeLocks.fromBigInt(
+          //   BigInt(dstWithdrawParamsJson.dstImmutables.timelocks)
+          // ).toDstTimeLocks();
+          // spendPsbt.setLocktime(Number(dstTimeLocks.privateWithdrawal));
+          spendPsbt.addInput({
+            hash: dstWithdrawParamsJson.dstEscrowAddress,
+            index: 0,
+            nonWitnessUtxo: Buffer.from(rawTxHex, "hex"),
+            redeemScript: htlcScript,
+            sequence: 0xfffffffe,
+          });
+
+          const redeemFee = 1000;
+          const redeemValue =
+            dstWithdrawParamsJson.dstImmutables.amount - redeemFee;
+          if (redeemValue <= 0) {
+            console.error("❌ Not enough value to redeem HTLC.");
+            return;
+          }
+
+          spendPsbt.addOutput({
+            address: btcUser!.address,
+            value: redeemValue,
+          });
+
+          spendPsbt.signInput(0, {
+            publicKey: btcUser!.publicKey,
+            sign: (hash) => Buffer.from(btcUser!.keyPair.sign(hash)),
+          });
+
+          spendPsbt.finalizeInput(0, (_: number, input: any) => {
+            console.log("input", input);
+
+            const signature = input.partialSig[0].signature;
+            const unlockingScript = bitcoin.script.compile([
+              signature,
+              secret,
+              bitcoin.opcodes.OP_TRUE,
+            ]);
+
+            const payment = bitcoin.payments.p2sh({
+              redeem: {
+                input: unlockingScript,
+                output: htlcScript,
+              },
+            });
+
+            return {
+              finalScriptSig: payment.input,
+              finalScriptWitness: undefined,
+            };
+          });
+
+          const finalTxHex = spendPsbt.extractTransaction().toHex();
+          finalTxId = await btcProvider.broadcastTx(finalTxHex);
+        }
 
         console.log("🎉 Maker successfully claimed BTC from HTLC!");
         console.log("✅ Redemption TXID:", finalTxId);
@@ -597,7 +729,7 @@ export default function Home() {
       }
 
       addStatus("Submitting secret");
-      const secretRes = await fetch(`/api/relayer/orders/${hash}/secret`, {
+      const secretRes = await fetch(`/api/relayer/orders/${orderHash}/secret`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ secret: uint8ArrayToHex(secret) }),
@@ -607,7 +739,9 @@ export default function Home() {
 
       addStatus("Waiting for withdrawal to complete");
       while (true) {
-        const statusRes = await fetch(`/api/relayer/orders/${hash}/status`);
+        const statusRes = await fetch(
+          `/api/relayer/orders/${orderHash}/status`
+        );
         const statusJson = await statusRes.json();
         if (statusJson.status === "withdraw_completed") {
           console.log("✅ Withdrawal complete:", statusJson);
@@ -653,39 +787,55 @@ export default function Home() {
           >
             GattaiSwap
           </div>
+          {/* ====== MODIFIED WALLET DISPLAY LOGIC ====== */}
           <div className="flex items-center gap-4">
-            {/* Show EVM wallet if connected */}
-            {evmSigner && (
-              <ConnectButton
-                chainStatus="icon"
-                accountStatus="avatar"
-                showBalance={false}
-              />
-            )}
-
-            {/* Show BTC wallet if connected */}
-            {btcUser && (
+            {gattaiWalletConfig ? (
+              // If GattaiWallet is connected, show it INSTEAD of other wallets
               <div>
                 <button
-                  onClick={() => setIsBtcAccountModalOpen(true)}
-                  className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white hover:bg-gray-700 cursor-pointer font-mono"
+                  onClick={() => setIsGattaiAccountModalOpen(true)}
+                  className="px-4 py-2 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-md hover:from-blue-600 hover:to-purple-700 cursor-pointer font-semibold flex items-center gap-2 transition-all"
                 >
-                  {btcUser.address.slice(0, 6)}...
-                  {btcUser.address.slice(-4)}
+                  <img src="/icon.png" alt="Gattai" className="w-5 h-5" />
+                  Gattai Wallet
                 </button>
               </div>
-            )}
+            ) : (
+              // Otherwise, show the individual EVM and BTC wallet statuses
+              <>
+                {evmSigner && (
+                  <ConnectButton
+                    chainStatus="icon"
+                    accountStatus="avatar"
+                    showBalance={false}
+                  />
+                )}
 
-            {/* Show a connect button if EITHER wallet is not connected */}
-            {(!evmSigner || !btcUser) && (
-              <button
-                onClick={() => setIsConnectModalOpen(true)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
-              >
-                Connect
-              </button>
+                {btcUser && (
+                  <div>
+                    <button
+                      onClick={() => setIsBtcAccountModalOpen(true)}
+                      className="px-4 py-2 bg-gray-800 border border-gray-600 rounded-md text-white hover:bg-gray-700 cursor-pointer font-mono"
+                    >
+                      {btcUser.address.slice(0, 6)}...
+                      {btcUser.address.slice(-4)}
+                    </button>
+                  </div>
+                )}
+
+                {/* Show a general connect button if not fully connected */}
+                {(!evmSigner || !btcUser) && (
+                  <button
+                    onClick={() => setIsConnectModalOpen(true)}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 cursor-pointer font-semibold"
+                  >
+                    Connect
+                  </button>
+                )}
+              </>
             )}
           </div>
+          {/* ====== END OF MODIFIED LOGIC ====== */}
         </div>
 
         {/* 2. Hero */}
@@ -846,9 +996,7 @@ export default function Home() {
         onClose={() => setIsConnectModalOpen(false)}
         onConnectEVM={evmConnectWallet}
         onConnectBTC={btcConnectWallet}
-        onConnectGattai={() =>
-          alert("Gattai Wallet connection not implemented yet.")
-        }
+        onConnectGattai={onConnectGattai}
         isEvmConnected={!!evmSigner}
         isBtcConnected={!!btcUser}
       />
@@ -856,6 +1004,11 @@ export default function Home() {
         isOpen={isBtcConnectModalOpen}
         onClose={() => setIsBtcConnectModalOpen(false)}
         onConnect={handleBtcConnect}
+      />
+      <ConnectGattaiModal
+        isOpen={isGattaiConnectModalOpen}
+        onClose={() => setIsGattaiConnectModalOpen(false)}
+        onConnect={handleGattaiConnect}
       />
       <BtcAccountModal
         isOpen={isBtcAccountModalOpen}
@@ -868,6 +1021,16 @@ export default function Home() {
           setIsBtcAccountModalOpen(false);
         }}
       />
+      {/* ====== RENDER THE NEW MODAL ====== */}
+      {gattaiWalletConfig && (
+        <GattaiWalletAccountModal
+          isOpen={isGattaiAccountModalOpen}
+          onClose={() => setIsGattaiAccountModalOpen(false)}
+          onDisconnect={handleGattaiDisconnect}
+          evmAddress={gattaiWalletConfig.evmAddress}
+          btcAddress={gattaiWalletConfig.btcAddress}
+        />
+      )}
       <StatusModal
         isOpen={isStatusModalOpen}
         onClose={() => setIsStatusModalOpen(false)}

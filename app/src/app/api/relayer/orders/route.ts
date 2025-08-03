@@ -22,10 +22,16 @@ export async function POST(req: Request) {
       !dstChainId ||
       !order ||
       !extension ||
-      !signature ||
-      !btcUserPublicKey
+      !signature
     ) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+    }
+
+    if ((srcChainId === 99999 || dstChainId === 999) && !btcUserPublicKey) {
+      return NextResponse.json(
+        { error: "Missing fields: btcUserPublicKey" },
+        { status: 400 }
+      );
     }
 
     const payload = {

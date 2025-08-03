@@ -14,17 +14,22 @@ import {
   patchedDomain,
   getOrderHashWithPatch,
 } from "../../../chains/sdk/evm/patch";
-import { createSrcHtlcScript } from "../../../chains/sdk/btc";
-import { UINT_40_MAX, UINT_256_MAX } from "@1inch/byte-utils";
+import { BtcProvider, createSrcHtlcScript } from "../../../chains/sdk/btc";
+import {
+  UINT_40_MAX,
+  UINT_256_MAX,
+  uint8ArrayToHex as uint8ArrayToHexForSecret,
+} from "@1inch/byte-utils";
 import { config } from "../../../chains/sdk/config";
 import { addressToEthAddressFormat } from "../../../chains/sdk/btc";
-import { Contract, Interface } from "ethers";
+import { Contract, Interface, JsonRpcProvider, getAddress } from "ethers";
 import IWETHContract from "../../../chains/sdk/evm/contracts/IWETH.json";
 
 import { Btc } from "../utils/bitcoin";
-import { Evm } from "../utils/ethereum";
+import { createEvmInstance } from "../utils/ethereum";
 
 import { utils } from "chainsig.js";
+import { SignerAsync } from "bitcoinjs-lib";
 const { toRSV, uint8ArrayToHex } = utils.cryptography;
 
 const BTC_RESOLVER_PUBKEY = process.env.NEXT_PUBLIC_BTC_RESOLVER_PUBLIC_KEY!;
@@ -32,7 +37,47 @@ const NETWORK = bitcoin.networks.testnet;
 
 const app = new Hono();
 
-app.post("/order", async (c) => {
+// --- AgentSigner Class Definition ---
+// This class wraps the agent's signing logic to be compatible with bitcoinjs-lib.
+class AgentSigner implements SignerAsync {
+  publicKey: Buffer;
+  private contractId: string;
+  private derivationPath: string;
+
+  constructor(contractId: string, derivationPath: string) {
+    this.contractId = contractId;
+    this.derivationPath = derivationPath;
+    this.publicKey = Buffer.alloc(0); // Initialize as empty
+  }
+
+  // Initializes the signer by fetching its public key. Must be called before use.
+  async init() {
+    const { publicKey: pubKeyString } = await Btc.deriveAddressAndPublicKey(
+      this.contractId,
+      this.derivationPath
+    );
+    this.publicKey = Buffer.from(pubKeyString, "hex");
+  }
+
+  // Asynchronously signs a hash using the remote agent.
+  async sign(hash: Buffer): Promise<Buffer> {
+    const signatureResponse = await requestSignature({
+      path: this.derivationPath,
+      payload: hash.toString("hex"),
+    });
+
+    const rsvSignature = toRSV(signatureResponse);
+
+    // The Fix: Tell Buffer.from() that the strings are in hex format.
+    const r = Buffer.from(rsvSignature.r, "hex");
+    const s = Buffer.from(rsvSignature.s, "hex");
+
+    // This will now correctly create a 64-byte buffer (32 bytes for r + 32 bytes for s).
+    return Buffer.concat([r, s]);
+  }
+}
+
+app.post("/", async (c) => {
   try {
     const {
       srcChainId,
@@ -54,38 +99,45 @@ app.post("/order", async (c) => {
     console.log("🔢 Source chain:", srcChainId);
     console.log("🔢 Destination chain:", dstChainId);
     console.log("🔢 Maker asset:", makerAsset);
+    console.log("🔢 Taker asset:", takerAsset);
     console.log("💸 Amount:", amount);
+
+    const srcEvm =
+      config[srcChainId]?.type === "evm"
+        ? createEvmInstance(srcChainId)
+        : createEvmInstance(dstChainId); // just for address query
+
+    const { address: evmRawAddress } = await srcEvm.deriveAddressAndPublicKey(
+      contractId,
+      "ethereum-1"
+    );
+    const evmAddress = getAddress(evmRawAddress); // checksummed
+
+    const { address: btcAddress, publicKey: btcPubKeyHex } =
+      await Btc.deriveAddressAndPublicKey(contractId, "bitcoin-1");
+
+    // Create the Buffer that bitcoinjs-lib requires.
+    const btcPubKeyBuf = Buffer.from(btcPubKeyHex, "hex");
+
+    const btcAddressInEthFormat = addressToEthAddressFormat(btcAddress);
+    // Note: Now we can just use the original hex string for the response.
+    const btcUserPublicKey = btcPubKeyHex;
+
+    // 🧾 Logs
+    console.log("🧾 EVM address:", evmAddress);
+    console.log("🧾 BTC address:", btcAddress);
+    console.log("🧾 BTC as EVM address:", btcAddressInEthFormat);
 
     // dummy for now
     const takingAmount = amount;
 
     // 1. Derive sender address
     let makerAddress: string;
-    let makerAddressInBtcFormat: string;
-    let btcUserPublicKey;
 
-    if (config[dstChainId]?.type === "evm") {
-      const { address } = await Evm.deriveAddressAndPublicKey(
-        contractId,
-        "ethereum-1"
-      );
-      makerAddress = address;
-      console.log("🧾 EVM maker address:", makerAddress);
-    } else if (config[dstChainId]?.type === "btc") {
-      const { address, publicKey } = await Btc.deriveAddressAndPublicKey(
-        contractId,
-        "bitcoin-1"
-      );
-      makerAddressInBtcFormat = address;
-      makerAddress = new Sdk.Address(
-        addressToEthAddressFormat(makerAddressInBtcFormat)
-      );
-      btcUserPublicKey = publicKey.toString("hex");
-      console.log(
-        "🧾 BTC maker address in BTC format:",
-        makerAddressInBtcFormat
-      );
-      console.log("🧾 BTC maker address in ETH Format:", makerAddress);
+    if (config[srcChainId]?.type === "evm") {
+      makerAddress = evmAddress;
+    } else if (config[srcChainId]?.type === "btc") {
+      makerAddress = btcAddressInEthFormat;
     } else {
       throw new Error("❌ Unsupported chain type");
     }
@@ -95,31 +147,36 @@ app.post("/order", async (c) => {
     // 2. Overrides (following frontend pattern)
     console.log("⚙️ Applying overrides based on chain types...");
 
+    console.log("config[srcChainId]", config[srcChainId]);
+    console.log("config[dstChainId]", config[dstChainId]);
+
     let escrowFacotryAddress = new Sdk.Address(nullAddress);
-    if (config[dstChainId]?.type === "evm") {
+    if (config[srcChainId]?.type === "evm") {
       escrowFacotryAddress = new Sdk.Address(config[srcChainId].escrowFactory);
-      console.log("🏗️ Escrow factory:", escrowFacotryAddress.value);
+      console.log("🏗️ Escrow factory:", escrowFacotryAddress.val);
     }
 
     let resolverAddress = new Sdk.Address(nullAddress);
-    if (config[dstChainId]?.type === "evm") {
+    if (config[srcChainId]?.type === "evm") {
       resolverAddress = new Sdk.Address(config[srcChainId].resolver!);
-      console.log("🧩 Resolver:", resolverAddress.value);
+      console.log("🧩 Resolver:", resolverAddress.val);
     }
 
     let receiver;
     if (config[dstChainId]?.type === "btc") {
-      receiver = new Sdk.Address(addressToEthAddressFormat(makerAddress));
-      console.log("📥 BTC receiver (ETH format):", receiver.value);
+      receiver = new Sdk.Address(btcAddressInEthFormat);
+      console.log("📥 BTC receiver (ETH format):", receiver.val);
     }
 
     // 3. Deposit + approve logic for EVM
-    if (config[dstChainId]?.type === "evm") {
+    if (config[srcChainId]?.type === "evm") {
+      const provider = new JsonRpcProvider(config[srcChainId].rpc);
       console.log("🔧 Performing EVM deposit & approve...");
 
       const contract = new Contract(
         config[srcChainId].wrappedNative!,
-        IWETHContract.abi
+        IWETHContract.abi,
+        provider
       );
 
       // Interface object for encoding
@@ -130,7 +187,7 @@ app.post("/order", async (c) => {
       const balance = await contract.balanceOf(makerAddress);
       console.log("💰 Balance:", balance.toString());
 
-      if (balance.lt(amount)) {
+      if (balance < amount) {
         console.log("🔄 Balance too low, preparing deposit...");
 
         // Encode deposit function data
@@ -138,25 +195,30 @@ app.post("/order", async (c) => {
 
         // Build and sign deposit tx
         const { transaction, hashesToSign } =
-          await Evm.prepareTransactionForSigning({
+          await srcEvm.prepareTransactionForSigning({
             from: makerAddress,
             to: config[srcChainId].wrappedNative!,
             value: amount,
             data,
+            gas: 100000n,
           });
+
+        console.log("transaction", transaction);
 
         const depositSig = await requestSignature({
           path: "ethereum-1",
           payload: uint8ArrayToHex(hashesToSign[0]),
         });
 
-        const signedDepositTx = Evm.finalizeTransactionSigning({
+        const signedDepositTx = srcEvm.finalizeTransactionSigning({
           transaction,
           rsvSignatures: [toRSV(depositSig)],
         });
 
-        const depositHash = await Evm.broadcastTx(signedDepositTx);
+        const { hash: depositHash } = await srcEvm.broadcastTx(signedDepositTx);
         console.log("✅ Deposit TX broadcasted:", depositHash);
+        await provider.waitForTransaction(depositHash, 1); // waits for 1 confirmation
+        console.log("✅ Deposit TX confirmed:", depositHash);
       }
 
       // STEP 2: Query Allowance
@@ -167,7 +229,7 @@ app.post("/order", async (c) => {
       );
       console.log("🔓 Allowance:", allowance.toString());
 
-      if (allowance.lt(UINT_256_MAX)) {
+      if (allowance < UINT_256_MAX) {
         console.log("🔄 Allowance too low, preparing approval...");
 
         // Encode approve function data
@@ -178,36 +240,44 @@ app.post("/order", async (c) => {
 
         // Build and sign approval tx
         const { transaction, hashesToSign } =
-          await Evm.prepareTransactionForSigning({
+          await srcEvm.prepareTransactionForSigning({
             from: makerAddress,
             to: config[srcChainId].wrappedNative!,
             value: 0,
             data,
+            gas: 100000n,
           });
+
+        console.log("transaction", transaction);
 
         const approveSig = await requestSignature({
           path: "ethereum-1",
           payload: uint8ArrayToHex(hashesToSign[0]),
         });
 
-        const signedApproveTx = Evm.finalizeTransactionSigning({
+        const signedApproveTx = srcEvm.finalizeTransactionSigning({
           transaction,
           rsvSignatures: [toRSV(approveSig)],
         });
 
-        const approveHash = await Evm.broadcastTx(signedApproveTx);
+        const { hash: approveHash } = await srcEvm.broadcastTx(signedApproveTx);
         console.log("✅ Approve TX broadcasted:", approveHash);
+        await provider.waitForTransaction(approveHash, 1);
+        console.log("✅ Approve TX confirmed:", approveHash);
       }
     }
 
     // 4. Create Order
     console.log("📦 Constructing order...");
     const secret = randomBytes(32);
+    console.log("secret", secret);
 
     const hashLock = {
-      keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
+      keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHexForSecret(secret)),
       sha256: bitcoin.crypto.sha256(secret),
     };
+
+    console.log("hashLock", hashLock);
 
     const order = Sdk.CrossChainOrder.new(
       escrowFacotryAddress,
@@ -261,7 +331,7 @@ app.post("/order", async (c) => {
     order.inner.fusionExtension.srcChainId = srcChainId;
     order.inner.fusionExtension.dstChainId = dstChainId;
 
-    if (config[dstChainId]?.type === "evm") {
+    if (config[srcChainId]?.type === "evm") {
       order.inner.inner.takerAsset = new Sdk.Address(
         config[srcChainId].trueERC20!
       );
@@ -280,37 +350,22 @@ app.post("/order", async (c) => {
 
     // 5. Signature
     let signature = "";
-    let btcMeta: any = null;
 
     if (config[srcChainId].type === "btc") {
-      console.log("✍️ Signing BTC order...");
-      const btcSignRes = await requestSignature({
-        path: "bitcoin-1",
-        payload: hash.slice(2),
-      });
+      console.log("✍️ Constructing and signing BTC funding transaction...");
 
-      const rBuf = Buffer.from(btcSignRes.big_r.affine_point, "hex");
-      const sBuf = Buffer.from(btcSignRes.s.scalar.padStart(64, "0"), "hex");
-      const compactSig = Buffer.concat([rBuf.slice(1), sBuf]);
+      // <<< MODIFIED: This entire block is new, using your working logic
+      // and adapting it for async signing.
 
-      const recoveryId = btcSignRes.recovery_id;
-      const pubkey = secp256k1.recover(
-        Buffer.from(hash.slice(2), "hex"),
-        compactSig,
-        recoveryId,
-        true
-      );
-      if (!pubkey) throw new Error("BTC public key recovery failed");
-
-      const btcPubKeyBuf = Buffer.from(pubkey);
       const timeLocks = order.inner.fusionExtension.timeLocks;
 
+      // 1. Create the HTLC script and P2SH address
       const htlcScript = createSrcHtlcScript(
-        hash,
+        hash, // Use the real order hash here
         hashLock.sha256,
         timeLocks._srcWithdrawal,
         timeLocks._srcCancellation,
-        btcPubKeyBuf,
+        btcPubKeyBuf, // The user's public key
         Buffer.from(BTC_RESOLVER_PUBKEY, "hex"),
         false
       );
@@ -319,11 +374,88 @@ app.post("/order", async (c) => {
         redeem: { output: htlcScript, network: NETWORK },
         network: NETWORK,
       });
+      console.log("🧾 HTLC P2SH Address:", p2sh.address);
 
-      console.log("🔑 BTC P2SH:", p2sh.address);
+      // 2. Prepare the PSBT to fund the HTLC
+      console.log("btcPubKeyBuf", btcPubKeyBuf);
 
+      const makerPayment = bitcoin.payments.p2wpkh({
+        pubkey: btcPubKeyBuf,
+        network: NETWORK,
+      });
+      const fromAddress = makerPayment.address!;
+      console.log(`🔍 Fetching UTXOs for ${fromAddress}...`);
+
+      const btcProvider = new BtcProvider(config[99999].rpc); // Using testnet rpc
+      const utxos = await btcProvider.getUtxos(fromAddress);
+      if (!utxos.length) {
+        throw new Error(
+          "❌ No UTXOs found in maker's wallet to fund the lock."
+        );
+      }
+
+      const fee = 10000;
+      const totalInputValue = utxos.reduce(
+        (sum: any, utxo: any) => sum + utxo.value,
+        0
+      );
+      const changeValue = totalInputValue - amount - fee;
+
+      if (changeValue < 0) {
+        throw new Error("❌ Not enough funds to lock BTC and cover the fee.");
+      }
+
+      const psbt = new bitcoin.Psbt({ network: NETWORK });
+
+      // Add inputs
+      for (const utxo of utxos) {
+        psbt.addInput({
+          hash: utxo.txid,
+          index: utxo.vout,
+          witnessUtxo: {
+            script: makerPayment.output!,
+            value: utxo.value,
+          },
+        });
+      }
+
+      // Add HTLC output
+      psbt.addOutput({
+        script: p2sh.output!,
+        value: amount,
+      });
+
+      // Add change output if necessary
+      if (changeValue > 0) {
+        psbt.addOutput({
+          address: fromAddress,
+          value: changeValue,
+        });
+      }
+
+      // 3. Sign transaction with the async AgentSigner
+      console.log("🔑 Initializing AgentSigner for BTC...");
+      const contractId = process.env.NEXT_PUBLIC_contractId!;
+      const signer = new AgentSigner(contractId, "bitcoin-1");
+      await signer.init();
+
+      console.log("✍️ Signing PSBT inputs one by one...");
+
+      // Use a for...of loop or a standard for loop for async operations
+      for (let i = 0; i < utxos.length; i++) {
+        console.log(`Attempting to sign input ${i}...`);
+        await psbt.signInputAsync(i, signer); // This will call your AgentSigner
+        console.log(`Input ${i} signed.`);
+      }
+
+      // 4. Finalize and extract the transaction
+      psbt.finalizeAllInputs();
+      const txHex = psbt.extractTransaction().toHex();
+      console.log("🧾 Funding Transaction Hex:", txHex);
+
+      // 5. The "signature" for your system is the funding proof
       signature = JSON.stringify({
-        txHex: "0x",
+        txHex: txHex, // The REAL signed transaction
         htlcScriptHex: htlcScript.toString("hex"),
         p2shAddress: p2sh.address!,
       });
@@ -344,7 +476,7 @@ app.post("/order", async (c) => {
 
     console.log("✅ Order constructed and signed successfully.");
     return c.json({
-      success: true,
+      secret: secret.toString("hex"),
       hash,
       hashLock: {
         sha256: hashLock.sha256.toString("hex"),
