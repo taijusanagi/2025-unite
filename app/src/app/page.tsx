@@ -42,7 +42,7 @@ const btcResolverPublicKey =
   process.env.NEXT_PUBLIC_BTC_RESOLVER_PUBLIC_KEY || "";
 
 export default function Home() {
-  const [showDex, setShowDex] = useState(true);
+  const [showDex, setShowDex] = useState(false);
   const { openConnectModal } = useConnectModal();
   const coins = ["/coins/btc.png", "/coins/monad.png", "coins/etherlink.png"];
   const chains = Object.entries(config).map(([chainId, cfg]) => ({
@@ -240,7 +240,9 @@ export default function Home() {
         btcUserPublicKey;
 
       if (gattaiWalletConfig) {
-        addStatus("Creating order via Gattai Wallet");
+        addStatus(
+          "Creating 1inch Fusion+ Order in Gattai Solver Built with NEAR's Shade Agent"
+        );
         const res = await fetch(
           `${gattaiAgentUrl}/api/create-order-by-intent`,
           {
@@ -316,7 +318,7 @@ export default function Home() {
             evmSigner!
           );
 
-          addStatus("Checking token balance");
+          addStatus("Checking user's wrapped native token balance");
           const balance = await srcWrappedNativeTokenContract.balanceOf(
             evmSigner!.address
           );
@@ -324,7 +326,7 @@ export default function Home() {
           updateLastStatus("done");
 
           if (balance < amount) {
-            addStatus("Depositing native token");
+            addStatus("Depositing wrapped native token");
             const tx = await srcWrappedNativeTokenContract.deposit({
               value: amount,
             });
@@ -338,7 +340,7 @@ export default function Home() {
             ]);
           }
 
-          addStatus("Checking token allowance");
+          addStatus("Checking user's wrapped native token allowance");
           const allowance = await srcWrappedNativeTokenContract.allowance(
             evmSigner!.address,
             config[srcChainId].limitOrderProtocol
@@ -347,7 +349,9 @@ export default function Home() {
           updateLastStatus("done");
 
           if (allowance < UINT_256_MAX) {
-            addStatus("Approving token allowance");
+            addStatus(
+              "Approving user's wrapped native token allowance for LOP."
+            );
             const tx = await srcWrappedNativeTokenContract.approve(
               config[srcChainId].limitOrderProtocol,
               UINT_256_MAX
@@ -363,7 +367,7 @@ export default function Home() {
           }
         }
 
-        addStatus("Sign the order in your wallet");
+        addStatus("Waiting for the user's signature");
         secret = randomBytes(32);
         hashLock = {
           keccak256: Sdk.HashLock.forSingleFill(uint8ArrayToHex(secret)),
@@ -598,7 +602,7 @@ export default function Home() {
       console.log("📨 Order submitted to relayer");
       updateLastStatus("done");
 
-      addStatus("Waiting for escrow creation");
+      addStatus("Waiting for escrow creation by resolver");
       while (true) {
         const statusRes = await fetch(
           `/api/relayer/orders/${orderHash}/status`
@@ -622,7 +626,7 @@ export default function Home() {
       }
 
       if (config[dstChainId].type === "btc") {
-        addStatus("Redeeming BTC HTLC");
+        addStatus("Redeeming BTC HTLC (BTC requires maker to sign it)");
         console.log("🔁 Starting BTC claim flow");
         const dstWithdrawParamsRes = await fetch(
           `/api/relayer/orders/${orderHash}/btc/dst-withdraw-params`
@@ -747,7 +751,7 @@ export default function Home() {
         ]);
       }
 
-      addStatus("Submitting secret");
+      addStatus("Submitting secret to relayer");
       const secretRes = await fetch(`/api/relayer/orders/${orderHash}/secret`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -756,7 +760,7 @@ export default function Home() {
       if (!secretRes.ok) throw new Error("Failed to share secret");
       updateLastStatus("done");
 
-      addStatus("Waiting for withdrawal to complete");
+      addStatus("Waiting for resolver's withdrawal to complete");
       while (true) {
         const statusRes = await fetch(
           `/api/relayer/orders/${orderHash}/status`
