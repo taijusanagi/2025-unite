@@ -3,7 +3,6 @@ import { requestSignature } from "@neardefi/shade-agent-js";
 import * as bitcoin from "bitcoinjs-lib";
 import * as secp256k1 from "@bitcoinerlab/secp256k1";
 
-import { config } from "../../../chains/sdk/config";
 import Sdk from "../../../chains/sdk/evm/cross-chain-sdk-shims";
 import {
   nativeTokenAddress,
@@ -14,62 +13,150 @@ import {
   getOrderHashWithPatch,
 } from "../../../chains/sdk/evm/patch";
 import { createSrcHtlcScript } from "../../../chains/sdk/btc";
-import { UINT_40_MAX } from "@1inch/byte-utils";
-
+import { UINT_40_MAX, UINT_256_MAX } from "@1inch/byte-utils";
+import { config } from "../../../chains/sdk/config";
 import { addressToEthAddressFormat } from "../../../chains/sdk/btc";
+import IWETHContract from "../../../chains/sdk/evm/contracts/IWETH.json";
+
+import { Btc } from "../utils/bitcoin";
+import { Evm } from "../utils/ethereum";
+
+import { utils } from "chainsig.js";
+const { toRSV } = utils.cryptography;
 
 const BTC_CHAIN_ID = 99999;
 const BTC_RESOLVER_PUBKEY = process.env.NEXT_PUBLIC_BTC_RESOLVER_PUBLIC_KEY!;
-
 const NETWORK = bitcoin.networks.testnet;
 
 const app = new Hono();
 
-app.post("/", async (c) => {
+app.post("/order", async (c) => {
   try {
-    const body = await c.req.json();
     const {
-      makerAddress,
       srcChainId,
       dstChainId,
-      btcUserAddress,
       amount = 5000,
     }: {
-      makerAddress: string;
       srcChainId: number;
       dstChainId: number;
-      btcUserAddress?: string;
       amount?: number;
-    } = body;
+    } = await c.req.json();
 
-    const isBtcSource = srcChainId === BTC_CHAIN_ID;
+    const contractId = process.env.NEXT_PUBLIC_contractId;
+
+    console.log("🟡 Starting order creation...");
+    console.log("🔢 Source chain:", srcChainId);
+    console.log("🔢 Destination chain:", dstChainId);
+    console.log("💸 Amount:", amount);
+
+    const isEvm = config[srcChainId]?.type === "evm";
+    const isBtc = srcChainId === BTC_CHAIN_ID;
+
+    // 1. Derive sender address
+    let makerAddress: string;
+    if (isEvm) {
+      const { address } = await Evm.deriveAddressAndPublicKey(
+        contractId,
+        "ethereum-1"
+      );
+      makerAddress = address;
+      console.log("🧾 EVM maker address:", makerAddress);
+    } else if (isBtc) {
+      const { address } = await Btc.deriveAddressAndPublicKey(
+        contractId,
+        "bitcoin-1"
+      );
+      makerAddress = address;
+      console.log("🧾 BTC maker address:", makerAddress);
+    } else {
+      throw new Error("❌ Unsupported chain type");
+    }
+
     const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
+    // 2. Overrides (following frontend pattern)
+    console.log("⚙️ Applying overrides based on chain types...");
+
     let escrowFacotryAddress = new Sdk.Address(nullAddress);
-    if (config[srcChainId]?.type === "evm") {
+    if (isEvm) {
       escrowFacotryAddress = new Sdk.Address(config[srcChainId].escrowFactory);
+      console.log("🏗️ Escrow factory:", escrowFacotryAddress.value);
     }
 
     let makerAsset = new Sdk.Address(nullAddress);
-    if (config[srcChainId]?.type === "evm") {
+    if (isEvm) {
       makerAsset = new Sdk.Address(config[srcChainId].wrappedNative!);
+      console.log("🪙 Maker asset:", makerAsset.value);
     }
 
     let resolverAddress = new Sdk.Address(nativeTokenAddress);
-    if (config[srcChainId]?.type === "evm") {
+    if (isEvm) {
       resolverAddress = new Sdk.Address(config[srcChainId].resolver!);
+      console.log("🧩 Resolver:", resolverAddress.value);
     }
 
     let takerAsset = new Sdk.Address(nativeTokenAddress);
     if (config[dstChainId]?.type === "evm") {
       takerAsset = new Sdk.Address(config[dstChainId].wrappedNative!);
+      console.log("🎯 Taker asset:", takerAsset.value);
     }
 
-    let receiver;
-    if (config[dstChainId]?.type === "btc" && btcUserAddress) {
-      receiver = new Sdk.Address(addressToEthAddressFormat(btcUserAddress));
+    let receiver = new Sdk.Address(makerAddress);
+    if (config[dstChainId]?.type === "btc") {
+      receiver = new Sdk.Address(addressToEthAddressFormat(makerAddress));
+      console.log("📥 BTC receiver (ETH format):", receiver.value);
     }
 
+    // 3. Deposit + approve logic for EVM
+    if (isEvm) {
+      console.log("🔧 Performing EVM deposit & approve...");
+
+      const { transaction: depositTx, hashesToSign: depositHashes } =
+        await Evm.buildDepositTx(
+          config[srcChainId].wrappedNative!,
+          IWETHContract.abi,
+          "deposit",
+          [],
+          amount
+        );
+
+      const depositSig = await requestSignature({
+        path: "ethereum-1",
+        payload: depositHashes[0].toString("hex"),
+      });
+
+      const depositFinal = Evm.finalizeTransactionSigning({
+        transaction: depositTx,
+        rsvSignatures: [toRSV(depositSig)],
+      });
+
+      const depositHash = await Evm.broadcastTx(depositFinal);
+      console.log("✅ Deposit broadcasted:", depositHash);
+
+      const { transaction: approveTx, hashesToSign: approveHashes } =
+        await Evm.buildApproveTx(
+          config[srcChainId].wrappedNative!,
+          IWETHContract.abi,
+          "approve",
+          [config[srcChainId].limitOrderProtocol, UINT_256_MAX]
+        );
+
+      const approveSig = await requestSignature({
+        path: "ethereum-1",
+        payload: approveHashes[0].toString("hex"),
+      });
+
+      const approveFinal = Evm.finalizeTransactionSigning({
+        transaction: approveTx,
+        rsvSignatures: [toRSV(approveSig)],
+      });
+
+      const approveHash = await Evm.broadcastTx(approveFinal);
+      console.log("✅ Approve broadcasted:", approveHash);
+    }
+
+    // 4. Create Order
+    console.log("📦 Constructing order...");
     const hashLock = {
       keccak256: "0x" + "00".repeat(32),
       sha256: Buffer.alloc(32),
@@ -124,27 +211,32 @@ app.post("/", async (c) => {
       }
     );
 
-    // ⬇️ Override chainId values after creation
     order.inner.fusionExtension.srcChainId = srcChainId;
     order.inner.fusionExtension.dstChainId = dstChainId;
 
-    // ✅ Post-creation override: takerAsset → trueERC20 (as in frontend)
-    if (config[srcChainId]?.type === "evm") {
+    if (isEvm) {
       order.inner.inner.takerAsset = new Sdk.Address(
         config[srcChainId].trueERC20!
+      );
+      console.log(
+        "✅ Overrode takerAsset to trueERC20:",
+        config[srcChainId].trueERC20
       );
     }
 
     const hash = getOrderHashWithPatch(srcChainId, order, {
       ...patchedDomain,
-      verifyingContract:
-        config[srcChainId]?.limitOrderProtocol || nativeTokenAddress,
+      verifyingContract: config[srcChainId].limitOrderProtocol!,
     });
 
+    console.log("🔐 Order hash:", hash);
+
+    // 5. Signature
     let signature: string;
     let btcMeta: any = null;
 
-    if (isBtcSource) {
+    if (isBtc) {
+      console.log("✍️ Signing BTC order...");
       const btcSignRes = await requestSignature({
         path: "bitcoin-1",
         payload: hash.slice(2),
@@ -181,6 +273,8 @@ app.post("/", async (c) => {
         network: NETWORK,
       });
 
+      console.log("🔑 BTC P2SH:", p2sh.address);
+
       signature = JSON.stringify({
         txHex: "0x",
         htlcScriptHex: htlcScript.toString("hex"),
@@ -193,6 +287,7 @@ app.post("/", async (c) => {
         htlcScript: htlcScript.toString("hex"),
       };
     } else {
+      console.log("✍️ Signing EVM order...");
       const ethSignRes = await requestSignature({
         path: "ethereum-1",
         payload: hash.slice(2),
@@ -203,8 +298,10 @@ app.post("/", async (c) => {
       const v = ethSignRes.recovery_id + 27;
 
       signature = `0x${r}${s}${v.toString(16).padStart(2, "0")}`;
+      console.log("🖋️ EVM signature:", signature);
     }
 
+    console.log("✅ Order constructed and signed successfully.");
     return c.json({
       success: true,
       srcChainId,
@@ -216,6 +313,7 @@ app.post("/", async (c) => {
       order: order.build(),
       extension: order.extension,
       signature,
+      makerAddress,
       ...btcMeta,
     });
   } catch (err: any) {
